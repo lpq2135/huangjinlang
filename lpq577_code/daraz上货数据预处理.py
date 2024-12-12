@@ -31,14 +31,14 @@ def get_product_data():
     cnx, cursor = mysql_pool.get_conn()
     try:
         cnx.start_transaction()
-        select_query = "SELECT * FROM product_id_deduplication WHERE status = 0 ORDER BY RAND() LIMIT 10"
-        cursor.execute(select_query)
-        records = cursor.fetchone()
+        select_query = "SELECT * FROM product_id_deduplication WHERE status = 0 AND account = %s ORDER BY RAND() LIMIT 10"
+        cursor.execute(select_query, (account,))
+        records = cursor.fetchall()
         if records:
             product_ids = [record[2] for record in records]
             formatted_ids = ','.join(['%s'] * len(product_ids))
-            update_query = "UPDATE product_id_deduplication SET status = 1 WHERE product_id IN (%s)" % formatted_ids
-            cursor.execute(update_query, tuple(product_ids))
+            update_query = "UPDATE product_id_deduplication SET status = 1 WHERE product_id IN (%s) AND account = %%s" % formatted_ids
+            cursor.execute(update_query, tuple(product_ids + [account]))
             cnx.commit()
         else:
             logging.warning("数据库获取上货数据异常")
@@ -61,8 +61,8 @@ def access_token_deal_with(rows):
 
 
 def process_product(value, product_data):
-    logging.info(f'[{product_id}-获取成功]')
     product_id = product_data[2]
+    logging.info(f'[{product_id}-获取成功]')
     product_object = Alibaba(product_id)
     product_package = product_object.build_product_package()
     if 'status' in product_package:
@@ -75,14 +75,12 @@ def process_product(value, product_data):
         main_images = [x['fullPathImageURI'] for x in data_packet_translate['main_images']]
         if len(main_images) > 8:
             main_images = main_images[:8]
-        # 主图翻译开关
-        is_img_translate = '1'
         # 进行是否翻译主图的判断
         if is_img_translate == '0':
             logging.info(f'[{product_id}-主图不进行象寄api翻译]')
         else:
             logging.info(f'[{product_id}-主图开始进行象寄api翻译]')
-            img_translate = XiangJi(product_data[9], mysql_pool)
+            img_translate = XiangJi(account, mysql_pool)
             main_images = img_translate.xiangji_image_translate(main_images, 1)
         weight = float(product_data[7])
         # 组装上货数据包
@@ -133,6 +131,8 @@ app_secret = '0XGyiUMf0obAP9FueDD16fid4M5xgmaV'
 logging_config.setup_logger()
 
 if __name__ == '__main__':
+    account = input('请输入你的account:')
+    is_img_translate = input('请输入主图翻译选项(0:不开启主图翻译; 1:开启主图翻译):')
     access_token_data = get_access_token()
     product_data_list = []
     max_workers = min(5, len(access_token_data))
@@ -172,7 +172,3 @@ if __name__ == '__main__':
                         logging.error('数据库无商品数据')
                         time.sleep(5)
                         sys.exit(1)
-                        # cesgit add .
-                        # git commit -m "Update code"
-                        # git push origin main
-地方大师傅

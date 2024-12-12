@@ -195,3 +195,7 @@ class Alibaba:
             return {'status': False, 'specifications': None, 'data': '商品起批数不符合要求'}
         else:
             return {'status': False, 'specifications': None, 'data': '商品已离线'}
+
+res = Alibaba('638797126308')
+res1 = res.build_product_package()
+print(res1)
