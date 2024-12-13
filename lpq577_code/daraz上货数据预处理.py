@@ -173,3 +173,4 @@ if __name__ == '__main__':
                         logging.error('数据库无商品数据')
                         time.sleep(5)
                         sys.exit(1)
+                        #路人话
