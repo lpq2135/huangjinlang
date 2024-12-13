@@ -65,10 +65,11 @@ def process_product(value, product_data):
     logging.info(f'[{product_id}-获取成功]')
     product_object = Alibaba(product_id)
     product_package = product_object.build_product_package()
-    if 'status' in product_package:
-        logging.info(f'[{product_id}-{product_package["data"]}]')
+    if not product_package['status']:
+        logging.warning(f'[{product_id}-{product_package["data"]}]')
+        return
     logging.info(f'[{product_id}-开始翻译数据包]')
-    text_translator = Translator(product_package)
+    text_translator = Translator(product_package['data'])
     data_packet_translate = text_translator.process_all()
     if data_packet_translate:
         # 主图处理

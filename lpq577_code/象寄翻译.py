@@ -19,7 +19,7 @@ class XiangJi:
         cnx, cursor = self.mysql_pool.get_conn()
         try:
             cursor.execute("SELECT user_key, img_trans_key FROM xiangji_key WHERE account = %s AND status = '0'", (self.account,))
-            rows = cursor.fetchall()
+            rows = cursor.fetchone()
             if rows is None:
                 logging.warning('数据库无象寄翻译密匙')
                 return None

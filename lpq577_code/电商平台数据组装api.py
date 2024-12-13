@@ -79,10 +79,13 @@ class Alibaba:
             return image_sources
 
     def get_product_attribute(self):
-        data = self.first_non_empty_item_in_data('values')
+        # web端
+        # data = self.first_non_empty_item_in_data('values')
+        # app端
+        data = self.first_non_empty_item_in_data('propsList')
         Filter_words = ['专利', '跨境', '货号', '下游', '订制', '地区', '授权', '进口', 'LOGO', '上市', '是否', '加工', '货源',
                         '产地', '形象', '代理', '售后']
-        attribute_list = [(f"{x['name']}:{x['value']}") for x in data if
+        attribute_list = [(f"{x['name']}:{x['value']}") for x in data['propsList'] if
                           all(word not in x['name'] for word in Filter_words) and x['value'] != '/']
         return attribute_list
 
@@ -195,7 +198,3 @@ class Alibaba:
             return {'status': False, 'specifications': None, 'data': '商品起批数不符合要求'}
         else:
             return {'status': False, 'specifications': None, 'data': '商品已离线'}
-
-res = Alibaba('638797126308')
-res1 = res.build_product_package()
-print(res1)
