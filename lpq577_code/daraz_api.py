@@ -184,8 +184,8 @@ class DarazProduct(Helper):
                 time.sleep(3)
                 response = self.perform_request(url, 'get')
                 return [i['url'] for i in response['data']['images']]
-            except Exception as e:
-                logging.warning(f"daraz网络图片获取异常（多张）,重试第{_ + 1}次, 错误信息：{e}")
+            except Exception:
+                logging.warning(f"daraz网络图片获取异常（多张）,重试第{_ + 1}次")
 
     def get_category_attributes(self):
         """
@@ -591,7 +591,7 @@ class DarazProduct(Helper):
             for _ in range(5):
                 result = self.perform_request(url, 'post', data=parameters)
                 if result['code'] == '0':
-                    return {'upload_site': self.upload_site, 'upload_code': 0, 'product_id': self.product_id, 'data': '商品上传成功'}
+                    return {'upload_site': self.upload_site, 'upload_code': 0, 'product_id': self.product_id, 'data': '商品上传成功', 'item_id': result['data']['item_id']}
                 elif result['code'] == 'ApiCallLimit':
                     time.sleep(3)
                 elif result['code'] == 'IllegalAccessToken':
@@ -657,6 +657,7 @@ def processing_price(upload_site, data, weight):
 def calculate_local_price(upload_site, original_price, weight):
     usd_to_cny = 7.14  # 美元-人民币汇率
     label_fee = 2.5  # 贴单
+    additional_fee_by_1688 = 5  # 1688产生的额外费用
     if upload_site == 'pk':
         acceptance_rate = 0.7  # 签收率
         dommission_rate = 0.0978  # 产品佣金（类目）
@@ -681,7 +682,7 @@ def calculate_local_price(upload_site, original_price, weight):
     # 根据采购价计算利润
     profit = 10 if price <= 10 else price
     # 采购价 + 利润
-    fod = (profit + price + label_fee) / usd_to_cny
+    fod = (profit + price + label_fee + additional_fee_by_1688) / usd_to_cny
     # 美金售价
     price_in_us_dollars = (total_first_leg_freight + fod + order_handling_fee + final_freight_vat) / (
                 1 - payment_fee - dommission_rate)

@@ -1,0 +1,12 @@
+{
+    "mysql": {
+        "host": "47.122.62.157",
+        "user": "daraz",
+        "password": "Qiang123@",
+        "database": "daraz"
+    },
+    "api": {
+        "app_key": "502742",
+        "app_secret": "0XGyiUMf0obAP9FueDD16fid4M5xgmaV"
+    }
+}

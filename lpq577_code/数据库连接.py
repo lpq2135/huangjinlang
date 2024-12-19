@@ -9,7 +9,7 @@ class MySqlPool:
         连接欸数据库
         """
         cnx = self.pool.get_connection()
-        cursor = cnx.cursor()
+        cursor = cnx.cursor(buffered=True)
         return cnx, cursor
 
     def close_mysql(self, cnx, cursor):

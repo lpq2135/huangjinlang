@@ -1,5 +1,4 @@
 import json
-import PIL
 import requests
 import re
 import random
@@ -9,19 +8,18 @@ from PIL import Image
 from bs4 import BeautifulSoup
 from io import BytesIO
 from logging_config import logging
-from fake_useragent import UserAgent
 
 class Alibaba:
     def __init__(self, product_id=None, source=None):
         self.product_id = product_id
-        self.ua = UserAgent().chrome
         self.source = source if source else self.link_request()
 
     def link_request(self):
+        User_Agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         for _ in range(4):
             try:
                 request_url = f'https://m.1688.com/offer/{self.product_id}.htm'
-                response = requests.get(url=request_url, headers={'User-Agent': self.ua}).text
+                response = requests.get(url=request_url, headers={'User-Agent': User_Agent}).text
                 if '下架商品页面' in response:
                     return False
                 sku_source = re.findall(r'(?<=window\.__INIT_DATA=).*', response)[0]
