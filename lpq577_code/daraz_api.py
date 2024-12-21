@@ -212,8 +212,8 @@ class DarazProduct(Helper):
                                  and x['name'] != 'short_description_en' and x['name'] != 'description_en'
                                  and x['name'] != 'brand']
                     }
-                    is_mandatory_sku = [x for x in result['data'] if x['attribute_type'] == 'sku' and x['name'] != 'SellerSku'
-                                        and x['name'] != 'price' and x['name'] != 'package_weight'
+                    is_mandatory_sku = [x for x in result['data'] if x['attribute_type'] == 'sku' and x['is_sale_prop'] == 1
+                                        and x['name'] != 'SellerSku' and x['name'] != 'price' and x['name'] != 'package_weight'
                                         and x['name'] != 'package_length' and x['name'] != 'package_width'
                                         and x['name'] != 'package_height' and x['name'] != '__images__'
                                         and x['name'] != 'quantity' and x['name'] != 'special_price'

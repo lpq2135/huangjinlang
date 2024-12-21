@@ -91,7 +91,7 @@ class Translator:
                 if self.is_chinese(value):
                     translated_value = self.translate_text_with_deepl(value).lower()
                     if 'colour' in translated_value or 'color' in translated_value:
-                        data_mew[key] = 'color_family'
+                        data_mew[key] = 'color'
                     elif 'size' in translated_value:
                         data_mew[key] = 'size'
                     else:
@@ -178,7 +178,7 @@ class Translator:
                 for future in futures:
                     future.result()
         except Exception as error:
-            logging.warning("搜狗翻译多线程错误捕获: ", error)
+            logging.warning("deepl翻译多线程错误捕获: ", error)
             return False
 
         return self.data

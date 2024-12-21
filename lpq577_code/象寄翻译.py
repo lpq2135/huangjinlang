@@ -13,7 +13,7 @@ class XiangJi:
         self.commitTime = str(int(time.time()))
         self.account = account
         self.mysql_pool = mysql_pool
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()  # 用于保护访问密钥的锁
         self.api_key = None  # 当前密钥
         self.img_trans_key = None  # 当前翻译密钥
         self.is_key_valid = True  # 密钥是否有效
@@ -72,21 +72,25 @@ class XiangJi:
         获取共享的API密钥
         """
         with self.lock:
+            if self.is_key_valid:
+                return
             if self.api_key is None:
                 key_data = self.get_xiangji_key()
                 if key_data:
                     self.api_key = key_data[0]
                     self.img_trans_key = key_data[1]
+                    logging.info(f'象寄首次获取密匙获取成功，api_key: {self.api_key}， img_trans_key: {self.img_trans_key}')
                 else:
                     logging.error('数据库无可用象寄API密钥')
                     self.is_key_valid = False  # 没有密钥
-            return self.api_key, self.img_trans_key
 
     def update_shared_xiangji_key(self):
         """
         当当前密钥的额度用完时，更新密钥
         """
         with self.lock:
+            if self.is_key_valid:
+                return
             self.change_xiangji_key_status(self.api_key)  # 更新密钥状态
             key_data = self.get_xiangji_key()  # 获取新的密钥
             if key_data:
@@ -98,9 +102,10 @@ class XiangJi:
             logging.info(f'象寄密钥已更新：{self.api_key}')
 
     def xiangji_image_translate(self, images, max_count):
-        api_key, img_trans_key = self.get_shared_xiangji_key()  # 获取共享密钥
-        if not self.is_key_valid:
-            return None    # 如果没有密钥，返回空
+        with self.lock:
+            self.get_shared_xiangji_key()  # 获取共享密钥
+            if not self.is_key_valid:
+                return None    # 如果没有密钥，返回空
 
         url = 'https://api.tosoiot.com'
         for idx, i in enumerate(images[:max_count]):
@@ -108,13 +113,13 @@ class XiangJi:
             retry_attempts = 0  # 累计重试次数
             while retry_attempts < 3:  # 最多重试 3 次
                 try:
-                    sign_string = md5((self.commitTime + "_" + api_key + "_" + img_trans_key).encode('utf-8')).hexdigest()
+                    sign_string = md5((self.commitTime + "_" + self.api_key + "_" + self.img_trans_key).encode('utf-8')).hexdigest()
                     parameters = {
                         'Action': 'GetImageTranslate',
                         'SourceLanguage': 'CHS',
                         'TargetLanguage': 'ENG',
                         'Url': quote(i, safe=':/'),
-                        'ImgTransKey': img_trans_key,
+                        'ImgTransKey': self.img_trans_key,
                         'Sign': sign_string,
                         'NeedWatermark': 0,
                         'Qos': 'BestQuality',

@@ -62,6 +62,8 @@ def update_product_status(product_id):
         )
         cnx.commit()
     except Exception as e:
+        print(1)
+        a = 1
         logging.warning('更新商品状态异常, product_id: %s, error: %s', product_id, str(e))
         cnx.rollback()
     finally:
