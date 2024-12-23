@@ -16,7 +16,6 @@ class XiangJi:
         self.lock = threading.Lock()  # 用于保护访问密钥的锁
         self.api_key = None  # 当前密钥
         self.img_trans_key = None  # 当前翻译密钥
-        self.is_key_valid = True  # 密钥是否有效
 
     def get_xiangji_key(self):
         """
@@ -30,7 +29,9 @@ class XiangJi:
                 logging.warning('数据库无象寄翻译密匙')
                 return None
             else:
-                return rows
+                self.api_key = rows[0]
+                self.img_trans_key = rows[1]
+                logging.info(f'象寄密匙获取成功, api_key: {self.api_key}, img_trans_key: {self.img_trans_key}')
         except Exception as e:
             logging.warning("象寄数据库获取数据异常: ", str(e))
         finally:
@@ -54,62 +55,24 @@ class XiangJi:
         finally:
             self.mysql_pool.close_mysql(cnx, cursor)
 
-    def change_xiangji_key_status(self, user_key):
+    def change_xiangji_key_status(self):
         """
         更新象寄密匙数据库状态
         """
         cnx, cursor = self.mysql_pool.get_conn()
         try:
-            cursor.execute("UPDATE xiangji_key SET status = '1' WHERE user_key = %s", (user_key,))
+            cursor.execute("UPDATE xiangji_key SET status = '1' WHERE user_key = %s", (self.api_key,))
             cnx.commit()
         except Exception as e:
             logging.warning(f'象寄数据库更改{user_key}异常: {e}')
         finally:
             self.mysql_pool.close_mysql(cnx, cursor)
 
-    def get_shared_xiangji_key(self):
-        """
-        获取共享的API密钥
-        """
-        with self.lock:
-            if self.is_key_valid:
-                return
-            if self.api_key is None:
-                key_data = self.get_xiangji_key()
-                if key_data:
-                    self.api_key = key_data[0]
-                    self.img_trans_key = key_data[1]
-                    logging.info(f'象寄首次获取密匙获取成功，api_key: {self.api_key}， img_trans_key: {self.img_trans_key}')
-                else:
-                    logging.error('数据库无可用象寄API密钥')
-                    self.is_key_valid = False  # 没有密钥
-
-    def update_shared_xiangji_key(self):
-        """
-        当当前密钥的额度用完时，更新密钥
-        """
-        with self.lock:
-            if self.is_key_valid:
-                return
-            self.change_xiangji_key_status(self.api_key)  # 更新密钥状态
-            key_data = self.get_xiangji_key()  # 获取新的密钥
-            if key_data:
-                self.api_key = key_data[0]
-                self.img_trans_key = key_data[1]
-                self.is_key_valid = True  # 密钥有效
-            else:
-                self.is_key_valid = False  # 没有密钥
-            logging.info(f'象寄密钥已更新：{self.api_key}')
-
     def xiangji_image_translate(self, images, max_count):
-        with self.lock:
-            self.get_shared_xiangji_key()  # 获取共享密钥
-            if not self.is_key_valid:
-                return None    # 如果没有密钥，返回空
-
+        self.get_xiangji_key()
         url = 'https://api.tosoiot.com'
         for idx, i in enumerate(images[:max_count]):
-            success = False  # 标记当前图片是否翻译成功
+            success = False
             retry_attempts = 0  # 累计重试次数
             while retry_attempts < 3:  # 最多重试 3 次
                 try:
@@ -129,19 +92,16 @@ class XiangJi:
 
                     if response['Code'] == 104 or response['Code'] == 118:  # 密钥额度用完
                         logging.info("密钥额度用完，正在尝试更新密钥")
-                        self.update_shared_xiangji_key()  # 更新密钥
-                        if not self.is_key_valid:
-                            logging.error("象寄密钥更新失败，无法继续翻译")
-                            return None  # 直接结束程序
+                        self.change_xiangji_key_status()
+                        self.get_xiangji_key()
                         retry_attempts = 0
                         continue  # 跳出重试循环，重新尝试
                     elif response['Code'] == 200:
                         # 如果翻译成功，更新图像URL
                         translated_image_url = response['Data']['Url']
                         images[idx] = translated_image_url  # 替换原始图片 URL
-                        success = True  # 标记翻译成功
+                        success = True
                         break  # 跳出重试循环
-
                 except Exception as e:
                     logging.warning(f'象寄翻译请求失败: {e}')
 

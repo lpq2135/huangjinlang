@@ -381,12 +381,16 @@ class DarazProduct(Helper):
 
         def process_variation(specifications, sku1_property=None, sku2_property=None):
             is_mandatory_sku = self.category_attributes[1]
+            name_list = [item['name'] for item in is_mandatory_sku]
             hasImage = True if sku_data['sku_parameter'][0]['imageUrl'] is not None else False
             properties = [prop for prop in [sku1_property, sku2_property] if prop is not None]
-            customize = not all(prop in [item['name'] for item in is_mandatory_sku] for prop in properties)
+            customize = not all(any(prop in name for name in name_list) for prop in properties)
             if customize:
                 sku1_property = sku1_property.title()
                 sku2_property = sku2_property.title() if sku2_property else None
+            else:
+                sku1_property = next(x for x in name_list if sku1_property in x)
+                sku2_property = next(x for x in (item['name'] for item in is_mandatory_sku) if sku2_property in x) if sku2_property else None
             variation1 = {
                 "name": sku1_property,
                 "hasImage": hasImage,
