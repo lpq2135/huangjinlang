@@ -134,6 +134,24 @@ def get_available_id_count():
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
+def get_deepl_api():
+    """
+    获取指定accunt的deepl密匙
+    """
+    cnx, cursor = mysql_pool.get_conn()
+    try:
+        cursor.execute("SELECT deepl_api FROM deepl_api WHERE account = %s AND status = '0'", (account,))
+        row = cursor.fetchone()[0]
+        if row is None:
+            logging.warning('数据库无象寄翻译密匙')
+            return
+        else:
+            return row
+    except Exception as e:
+        logging.warning("象寄数据库获取数据异常: ", str(e))
+    finally:
+        mysql_pool.close_mysql(cnx, cursor)
+
 # 处理数据库中获取的多行数据，返回以 user_id 为键的字典
 def access_token_deal_with(rows):
     my_dict = {}
@@ -168,7 +186,7 @@ def process_product(value, product_data, event):
     logging.info(f'{product_id}-开始文字翻译数据包')
 
     # 使用 Translator 类进行文字翻译
-    text_translator = Translator(product_package['data'])
+    text_translator = Translator(product_package['data'], deepl_api)
     data_packet_translate = text_translator.process_all()
 
     if data_packet_translate:
@@ -245,7 +263,7 @@ def process_product(value, product_data, event):
 
         logging.info(upload_results_list)  # 输出上传结果
     else:
-        logging.info('文字翻译异常')  # 如果文字翻译异常，记录日志
+        logging.info(f'{product_id}-文字翻译异常')  # 如果文字翻译异常，记录日志
 
 
 # 配置数据库连接和其他配置信息
@@ -260,6 +278,12 @@ logging_config.setup_logger()
 if __name__ == '__main__':
     account = input('请输入你的account:')
     is_img_translate = input('请输入主图翻译选项(0:不开启主图翻译; 1:开启主图翻译):')
+    # 获取对应account的deepl_api
+    deepl_api = get_deepl_api()
+    if not deepl_api:
+        logging.error('数据库可用对应accoun的deepl_api')
+        time.sleep(5)
+        sys.exit()
     # 获取对应account的数据库id数量
     available_id_count = get_available_id_count()
     if not available_id_count:
@@ -276,7 +300,7 @@ if __name__ == '__main__':
         sys.exit()
 
     product_data_list = []
-    max_workers = min(8, len(access_token_data))  # 最大线程数
+    max_workers = min(10, len(access_token_data))  # 最大线程数
     logging.info(f'当前工作线程数量：{max_workers}')
 
     # 创建一个锁对象

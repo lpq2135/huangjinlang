@@ -40,7 +40,7 @@ class Alibaba:
 
     def get_title(self):
         title_word_replacement = ['厂家', '供应', '销售', '规格', '齐全', '现货', '发货', '促销', '生产', '东莞',
-                                  '武汉', '地区', '成都', '跨境', '批发', '直发']
+                                  '武汉', '地区', '成都', '跨境', '批发', '直发', '量大从优']
         title = self.source['globalData']['tempModel']['offerTitle']
         for word in title_word_replacement:
             title = title.replace(word, '')

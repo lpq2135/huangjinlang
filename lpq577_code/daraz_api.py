@@ -391,6 +391,11 @@ class DarazProduct(Helper):
             else:
                 sku1_property = next(x for x in name_list if sku1_property in x)
                 sku2_property = next(x for x in (item['name'] for item in is_mandatory_sku) if sku2_property in x) if sku2_property else None
+            if specifications == 2:
+                if sku1_property == sku2_property:
+                    customize = True
+                    sku1_property = 'Variants_1'
+                    sku2_property = 'Variants_2'
             variation1 = {
                 "name": sku1_property,
                 "hasImage": hasImage,
@@ -598,14 +603,18 @@ class DarazProduct(Helper):
                     return {'upload_site': self.upload_site, 'upload_code': 0, 'product_id': self.product_id, 'data': '商品上传成功', 'item_id': result['data']['item_id']}
                 elif result['code'] == 'ApiCallLimit':
                     time.sleep(3)
+                elif result['code'] == '500':
+                    time.sleep(3)
                 elif result['code'] == 'IllegalAccessToken':
                     return {'upload_site': self.upload_site, 'upload_code': -1, 'product_id': self.product_id, 'data': 'accesstoken错误'}
                 elif result['code'] == '4221':
                     return {'upload_site': self.upload_site, 'upload_code': 4221, 'product_id': self.product_id, 'data': '平台限制产品上传(可能违规)'}
+                elif result['code'] == '5':
+                    return {'upload_site': self.upload_site, 'upload_code': 5, 'product_id': self.product_id, 'data': '数据包错误(异常请求)'}
                 else:
                     return {'upload_site': self.upload_site, 'upload_code': -2, 'product_id': self.product_id, 'data': result['detail']}
-        return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
-                'data': self.category_attributes['status']}
+            return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
+                    'data': self.category_attributes['status']}
 
     def get_product_item(self):
         """

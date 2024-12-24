@@ -8,8 +8,9 @@ import concurrent.futures
 
 
 class Translator:
-    def __init__(self, data=None):
+    def __init__(self, data=None, deepl_api=None):
         self.data = data
+        self.deepl_api = deepl_api
 
     def translate_text_with_sougou(self, text, translate_to='en'):
         headers = {
@@ -47,7 +48,8 @@ class Translator:
         raise Exception("搜狗翻译请求失败")
 
     def translate_text_with_deepl(self, text):
-        auth_key = "a6434d71-4d86-4ef8-bdfd-6faebcd0008a"  # Replace with your key
+        text = re.sub(r'[^\w\s.,!?:;\'"-]', '', text)
+        auth_key = self.deepl_api
         deepl_url = "https://api.deepl.com/v2/translate"
         data = {
             'auth_key': auth_key,
@@ -55,15 +57,19 @@ class Translator:
             'source_lang': 'ZH',
             'target_lang': 'EN'
         }
-        for _ in range(5):
+        attempt = 1
+        while attempt <= 10:
             try:
-                response = requests.post(deepl_url, data=data).json()
-                if 'text' in response["translations"][0]:
-                    result = response["translations"][0]["text"]
-                    if self.is_chinese(result) is False:
-                        return (self.remove_last_dot(result)).title()
+                response = requests.post(deepl_url, data=data, timeout=10)
+                if response.status_code != 200:
+                    logging.warning(f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试")
+                    continue
+                result = response.json()["translations"][0]["text"]
+                if self.is_chinese(result) is False:
+                    return (self.remove_last_dot(result)).title()
             except Exception as e:
-                logging.warning(f"deepl翻译请求失败，尝试第{_ + 1}次. Error: {e}")
+                logging.warning(f"deepl翻译请求失败，尝试第{attempt}次. Error: {e}")
+            attempt += 1
         raise Exception("deepl翻译请求失败")
 
     def get_proxy(self):
@@ -95,7 +101,7 @@ class Translator:
                     elif 'size' in translated_value:
                         data_mew[key] = 'size'
                     else:
-                        translated_value = re.sub(r' +', '_', self.translate_text_with_deepl(value))
+                        translated_value = re.sub(r'[\(\)]', '', re.sub(r' +', '_', self.translate_text_with_deepl(value)))
                         if len(translated_value) > 15:
                             data_mew[key] = f'variants_{count}'
                         else:
@@ -152,7 +158,7 @@ class Translator:
                             sku1_value = translated_values[sku1_value]
                         if sku2_value in translated_values:
                             sku2_value = translated_values[sku2_value]
-                        new_param['name'] = sku1_value + '||' + sku2_value
+                        new_param['name'] = sku1_value.replace('"', '') + '||' + sku2_value.replace('"', '')
                     self.data['skumodel']['sku_data']['sku_parameter'] = new_params
 
     def process_title(self):
@@ -178,7 +184,7 @@ class Translator:
                 for future in futures:
                     future.result()
         except Exception as error:
-            logging.warning("deepl翻译多线程错误捕获: ", error)
+            logging.warning("deepl翻译多线程错误捕获: %s", error)
             return False
 
         return self.data
