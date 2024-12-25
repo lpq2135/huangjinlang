@@ -30,9 +30,9 @@ class Helper:
     def perform_request(self, url, method='GET', headers=None, files=None, data=None):
         try:
             if method.upper() == 'GET':
-                response = requests.get(url)
+                response = requests.get(url, timeout=30)
             elif method.upper() == 'POST':
-                response = requests.post(url, headers=headers, files=files, data=data)
+                response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
             else:
                 raise ValueError('Invalid method: {}'.format(method))
 
@@ -40,10 +40,8 @@ class Helper:
             return response.json()  # Assumes server response is in JSON format.
         except requests.exceptions.HTTPError as http_err:
             logging.warning('HTTP error occurred: {}'.format(http_err))
-            time.sleep(5)
         except Exception as err:
             logging.warning('Other error occurred: {}'.format(err))
-            time.sleep(5)
 
 
 class DarazProduct(Helper):

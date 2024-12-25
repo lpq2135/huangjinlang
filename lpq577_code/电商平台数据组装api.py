@@ -19,7 +19,7 @@ class Alibaba:
         for _ in range(4):
             try:
                 request_url = f'https://m.1688.com/offer/{self.product_id}.htm'
-                response = requests.get(url=request_url, headers={'User-Agent': User_Agent}).text
+                response = requests.get(url=request_url, headers={'User-Agent': User_Agent}, timeout=30).text
                 if '下架商品页面' in response:
                     return False
                 sku_source = re.findall(r'(?<=window\.__INIT_DATA=).*', response)[0]

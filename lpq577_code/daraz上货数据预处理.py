@@ -41,7 +41,7 @@ def get_product_data():
     cnx, cursor = mysql_pool.get_conn()
     try:
         cursor.execute(
-            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 50",
+            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 500",
             (account,))
         rows = cursor.fetchall()
         return None if not rows else rows
@@ -62,8 +62,6 @@ def update_product_status(product_id):
         )
         cnx.commit()
     except Exception as e:
-        print(1)
-        a = 1
         logging.warning('更新商品状态异常, product_id: %s, error: %s', product_id, str(e))
         cnx.rollback()
     finally:
@@ -171,9 +169,9 @@ def process_product(value, product_data, event):
         return
 
     product_id = product_data[2]
-    logging.info(f'{product_id}-获取成功')
 
     # 使用 Alibaba 类来处理商品数据
+    logging.info(f'{product_id}-获取成功-开始获取数据包')
     product_object = Alibaba(product_id)
     product_package = product_object.build_product_package()
 
@@ -181,6 +179,7 @@ def process_product(value, product_data, event):
     if not product_package['status']:
         logging.warning(f'{product_id}-{product_package["data"]}')
         update_product_status(product_id)
+        logging.warning(f'{product_id}-数据库状态更改成功')
         return
 
     logging.info(f'{product_id}-开始文字翻译数据包')
@@ -242,8 +241,10 @@ def process_product(value, product_data, event):
                 attrs['skumodel'] = skumodel_new  # 更新数据包中的价格信息
 
                 # 创建上货请求并上传商品
+                logging.info(f'{product_id}-开始进行{i[1]}上货处理')
                 daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
                 upload_results = daraz_product.create_product()
+                logging.warning(f'{product_id}-上货结果返回')
 
                 # 收集上传结果
                 new_dict = {'platform': product_data[0], 'email': i[2]}
@@ -253,14 +254,15 @@ def process_product(value, product_data, event):
 
                 # 更新商品状态
                 update_product_status(product_id)
+                logging.warning(f'{product_id}-数据库状态更改成功')
             else:
                 # 如果价格不符合要求，更新商品状态并记录错误
                 product_id = data_packet_translate['product_id']
                 update_product_status(product_id)
+                logging.warning(f'{product_id}-数据库状态更改成功')
                 new_dict = {'platform': product_data[0],  'email': i[2], 'upload_site': i[1], 'upload_code': -3, 'product_id': product_id, 'data': '数据包价格不符合要求'}
                 upload_results_list.append(new_dict)
                 record_product_status(new_dict)
-
         logging.info(upload_results_list)  # 输出上传结果
     else:
         logging.info(f'{product_id}-文字翻译异常')  # 如果文字翻译异常，记录日志
@@ -343,7 +345,7 @@ if __name__ == '__main__':
 
         # 等待线程执行完毕
         while futures or max_workers == 1:
-            done, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+            done, futures = concurrent.futures.wait(futures, timeout=300, return_when=concurrent.futures.FIRST_COMPLETED)
 
             with lock:
                 if stop_event.is_set():  # 如果事件已设置，停止所有工作

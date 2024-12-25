@@ -60,7 +60,7 @@ class Translator:
         attempt = 1
         while attempt <= 10:
             try:
-                response = requests.post(deepl_url, data=data, timeout=10)
+                response = requests.post(deepl_url, data=data, timeout=30)
                 if response.status_code != 200:
                     logging.warning(f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试")
                     continue
@@ -118,7 +118,7 @@ class Translator:
     def process_sku_parameter(self):
         specifications = self.data['specifications']
         if specifications >= 1:
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 if specifications == 1:
                     new_params = []
                     futures = {}

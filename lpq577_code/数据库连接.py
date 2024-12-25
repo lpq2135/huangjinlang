@@ -2,7 +2,7 @@ import mysql.connector
 
 class MySqlPool:
     def __init__(self, **config):
-        self.pool = mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool", pool_size=10, **config)
+        self.pool = mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool", pool_size=32, **config)
 
     def get_conn(self):
         """

@@ -81,7 +81,7 @@ class XiangJi:
             for idx, i in enumerate(images[:max_count]):
                 success = False
                 retry_attempts = 0  # 累计重试次数
-                while retry_attempts < 5:  # 最多重试 3 次
+                while retry_attempts < 5:  # 最多重试 5 次
                     try:
                         sign_string = md5((self.commitTime + "_" + self.api_key + "_" + self.img_trans_key).encode('utf-8')).hexdigest()
                         parameters = {
@@ -95,7 +95,7 @@ class XiangJi:
                             'Qos': 'BestQuality',
                             'CommitTime': self.commitTime
                         }
-                        response = requests.get(url=url, params=parameters).json()
+                        response = requests.get(url=url, params=parameters, timeout=30).json()
 
                         if response['Code'] == 104 or response['Code'] == 118:  # 密钥额度用完
                             logging.info("象寄密钥额度用完，正在尝试更新密钥")
