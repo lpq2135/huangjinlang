@@ -22,3 +22,7 @@ import requests
 str = '4" One Character'
 s = str.replace('"', '')
 print(s)
+
+
+s=1
+s=2

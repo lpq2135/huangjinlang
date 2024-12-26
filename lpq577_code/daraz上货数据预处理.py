@@ -41,7 +41,7 @@ def get_product_data():
     cnx, cursor = mysql_pool.get_conn()
     try:
         cursor.execute(
-            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 500",
+            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 10",
             (account,))
         rows = cursor.fetchall()
         return None if not rows else rows
@@ -171,18 +171,19 @@ def process_product(value, product_data, event):
     product_id = product_data[2]
 
     # 使用 Alibaba 类来处理商品数据
-    logging.info(f'{product_id}-获取成功-开始获取数据包')
+    logging.info(f'{product_id}-获取成功-开始请求数据包')
     product_object = Alibaba(product_id)
     product_package = product_object.build_product_package()
 
     # 如果数据包构建失败，更新商品状态并返回
     if not product_package['status']:
         logging.warning(f'{product_id}-{product_package["data"]}')
+        logging.info(f'{threading.get_ident()}-{product_id}-开始更新id状态')
         update_product_status(product_id)
-        logging.warning(f'{product_id}-数据库状态更改成功')
+        logging.info(f'{threading.get_ident()}-{product_id}-更新id状态完成')
         return
 
-    logging.info(f'{product_id}-开始文字翻译数据包')
+    logging.info(f'{threading.get_ident()}-{product_id}-开始文字翻译数据包')
 
     # 使用 Translator 类进行文字翻译
     text_translator = Translator(product_package['data'], deepl_api)
@@ -198,14 +199,14 @@ def process_product(value, product_data, event):
 
         # 判断是否需要进行主图翻译
         if is_img_translate == '0':
-            logging.info(f'{product_id}-主图不进行象寄api翻译')
+            logging.info(f'{threading.get_ident()}-{product_id}-主图不进行象寄api翻译')
         else:
-            logging.info(f'{product_id}-主图开始进行象寄api翻译')
+            logging.info(f'{threading.get_ident()}-{product_id}-主图开始进行象寄api翻译')
             main_images = img_translate.xiangji_image_translate(main_images, 1)
 
             # 如果象寄翻译返回为空，停止后续线程任务
             if not main_images:
-                logging.warning(f'{product_id}-象寄翻译返回为空, 停止继续启动新的线程')
+                logging.warning(f'{threading.get_ident()}-{product_id}-象寄翻译返回为空, 停止继续启动新的线程')
                 event.set()  # 设置停止事件，通知其他线程停止
                 return
 
@@ -241,10 +242,9 @@ def process_product(value, product_data, event):
                 attrs['skumodel'] = skumodel_new  # 更新数据包中的价格信息
 
                 # 创建上货请求并上传商品
-                logging.info(f'{product_id}-开始进行{i[1]}上货处理')
+                logging.info(f'{threading.get_ident()}-{product_id}-开始进行{i[1]}上货处理')
                 daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
                 upload_results = daraz_product.create_product()
-                logging.warning(f'{product_id}-上货结果返回')
 
                 # 收集上传结果
                 new_dict = {'platform': product_data[0], 'email': i[2]}
@@ -253,19 +253,21 @@ def process_product(value, product_data, event):
                 upload_results_list.append(new_dict)
 
                 # 更新商品状态
+                logging.info(f'{threading.get_ident()}-{product_id}-开始更新id状态')
                 update_product_status(product_id)
-                logging.warning(f'{product_id}-数据库状态更改成功')
+                logging.info(f'{threading.get_ident()}-{product_id}-更新id状态完成')
             else:
                 # 如果价格不符合要求，更新商品状态并记录错误
                 product_id = data_packet_translate['product_id']
+                logging.info(f'{threading.get_ident()}-{product_id}-开始更新id状态')
                 update_product_status(product_id)
-                logging.warning(f'{product_id}-数据库状态更改成功')
+                logging.info(f'{threading.get_ident()}-{product_id}-更新id状态完成')
                 new_dict = {'platform': product_data[0],  'email': i[2], 'upload_site': i[1], 'upload_code': -3, 'product_id': product_id, 'data': '数据包价格不符合要求'}
                 upload_results_list.append(new_dict)
                 record_product_status(new_dict)
         logging.info(upload_results_list)  # 输出上传结果
     else:
-        logging.info(f'{product_id}-文字翻译异常')  # 如果文字翻译异常，记录日志
+        logging.info(f'{threading.get_ident()}-{product_id}-文字翻译异常')  # 如果文字翻译异常，记录日志
 
 
 # 配置数据库连接和其他配置信息
@@ -323,13 +325,12 @@ if __name__ == '__main__':
 
     # 创建一个 threading.Event 实例，用于线程间同步
     stop_event = threading.Event()
-
     # 启动线程池处理任务
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # 提交初始的线程任务
         for _ in range(max_workers):
             with lock:
-                if not product_data_list:
+                if len(product_data_list) ==0 :
                     product_new_data = get_product_data()
                     if product_new_data:
                         product_data_list.extend(product_new_data)
@@ -342,6 +343,7 @@ if __name__ == '__main__':
             value = next(cyclic_values)
             future = executor.submit(process_product, value, product_data, stop_event)
             futures.add(future)
+
 
         # 等待线程执行完毕
         while futures or max_workers == 1:
@@ -363,4 +365,3 @@ if __name__ == '__main__':
                         logging.error('数据库无商品数据')
                         time.sleep(5)
                         sys.exit()
-saf = 1

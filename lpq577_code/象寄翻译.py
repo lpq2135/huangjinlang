@@ -1,6 +1,7 @@
 import requests
 import time
 import threading
+import signal
 
 from hashlib import md5
 from urllib.parse import quote
@@ -81,7 +82,7 @@ class XiangJi:
             for idx, i in enumerate(images[:max_count]):
                 success = False
                 retry_attempts = 0  # 累计重试次数
-                while retry_attempts < 5:  # 最多重试 5 次
+                while retry_attempts < 10:  # 最多重试 10 次
                     try:
                         sign_string = md5((self.commitTime + "_" + self.api_key + "_" + self.img_trans_key).encode('utf-8')).hexdigest()
                         parameters = {
@@ -111,6 +112,15 @@ class XiangJi:
                             images[idx] = translated_image_url  # 替换原始图片 URL
                             success = True
                             break  # 跳出重试循环
+                        else:
+                            if retry_attempts >= 5:
+                                self.change_and_get_xiangji_key()
+                                self.commitTime = str(int(time.time()))
+                                if not self.is_available:
+                                    return None
+                                logging.info("更新象寄密匙重试")
+                                retry_attempts = 0
+                                continue
                     except Exception as e:
                         logging.warning(f'象寄翻译请求失败: {e}')
 
@@ -118,11 +128,12 @@ class XiangJi:
                     time.sleep(2)
 
                 if not success:
-                    # 如果3次重试都失败，更新密钥
+                    # 如果 10 次重试都失败，更新密钥
                     logging.warning(f"象寄翻译失败，尝试更新密钥")
                     return None  # 如果三次重试都失败，直接结束程序
 
             return images  # 返回翻译后的图片列表
+
 
 
 # mysql_pool = MySqlPool(host='47.122.62.157', password='Qiang123@', user='daraz', database='daraz')

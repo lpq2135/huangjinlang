@@ -26,6 +26,7 @@ class Alibaba:
                 return json.loads(sku_source)
             except Exception as e:
                 logging.warning(f"1688链接请求错误: {str(e)}")
+        return None
 
     def generate_random_string(self, length):
         letters = string.ascii_letters + string.digits
@@ -66,7 +67,7 @@ class Alibaba:
             for img in soup.find_all('img'):
                 if 'src' in img.attrs:
                     src = img['src'].replace("\\\"", "")
-                    response = requests.get(src, headers=headers)
+                    response = requests.get(src, headers=headers, timeout=30)
                     try:
                         img = Image.open(BytesIO(response.content))
                         if img.size[0] >= 700 and img.size[1] >= 600:

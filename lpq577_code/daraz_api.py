@@ -225,6 +225,7 @@ class DarazProduct(Helper):
             except Exception as e:
                 logging.warning(f'{self.product_id}-获取类目属性失败，重试第{_ + 1}次，错误信息：{e}')
                 time.sleep(2)
+        return None
 
     def check_sku(self, specifications):
         """
@@ -611,8 +612,8 @@ class DarazProduct(Helper):
                     return {'upload_site': self.upload_site, 'upload_code': 5, 'product_id': self.product_id, 'data': '数据包错误(异常请求)'}
                 else:
                     return {'upload_site': self.upload_site, 'upload_code': -2, 'product_id': self.product_id, 'data': result['detail']}
-            return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
-                    'data': self.category_attributes['status']}
+        return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
+                'data': False}
 
     def get_product_item(self):
         """
