@@ -48,7 +48,6 @@ class Translator:
         raise Exception("搜狗翻译请求失败")
 
     def translate_text_with_deepl(self, text):
-        text = re.sub(r'[^\w\s.,!?:;\'"-]', '', text)
         auth_key = self.deepl_api
         deepl_url = "https://api.deepl.com/v2/translate"
         data = {
@@ -64,18 +63,12 @@ class Translator:
                 if response.status_code != 200:
                     logging.warning(f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试")
                     continue
-                result = response.json()["translations"][0]["text"]
-                if self.is_chinese(result) is False:
-                    return (self.remove_last_dot(result)).title()
+                result = [i['text'] for i in response.json()["translations"]]
+                return result
             except Exception as e:
                 logging.warning(f"deepl翻译请求失败，尝试第{attempt}次. Error: {e}")
             attempt += 1
         raise Exception("deepl翻译请求失败")
-
-    def get_proxy(self):
-        juliang_url = 'https://v2.api.juliangip.com/unlimited/getips?auto_white=1&num=10&pt=1&result_type=json&trade_no=5551379604897883&sign=f1448f67995d2b956efa78fda1d30a8c'
-        result = requests.get(juliang_url).json()
-        return result['data']['proxy_list']
 
     def remove_last_dot(self, str):
         if str[-1] == '.':
@@ -89,102 +82,308 @@ class Translator:
                 return True
         return False
 
-    def process_sku_property_name(self):
-        if 'sku_property_name' in self.data['skumodel']['sku_data']:
-            data_mew = self.data['skumodel']['sku_data']['sku_property_name']
-            count = 1
-            for key, value in data_mew.items():
-                if self.is_chinese(value):
-                    translated_value = self.translate_text_with_deepl(value).lower()
-                    if 'colour' in translated_value or 'color' in translated_value:
-                        data_mew[key] = 'color'
-                    elif 'size' in translated_value:
-                        data_mew[key] = 'size'
-                    else:
-                        translated_value = re.sub(r'[\(\)]', '', re.sub(r' +', '_', self.translate_text_with_deepl(value)))
-                        if len(translated_value) > 15:
-                            data_mew[key] = f'variants_{count}'
-                        else:
-                            data_mew[key] = translated_value
-                    count += 1
-                else:
-                    value1 = re.sub(r' +', '_', value)
-                    if len(value1) > 15:
-                        data_mew[key] = f'variants_{count}'
-                        count += 1
-                    else:
-                        data_mew[key] = value1
+    def split_list(self, input_list):
+        # 将列表按照指定大小切分
+        return [input_list[i:i + 50] for i in range(0, len(input_list), 50)]
 
-    def process_sku_parameter(self):
-        specifications = self.data['specifications']
-        if specifications >= 1:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                if specifications == 1:
-                    new_params = []
-                    futures = {}
-                    for param in self.data['skumodel']['sku_data']['sku_parameter']:
-                        new_param = deepcopy(param)
-                        new_params.append(new_param)
-                        if self.is_chinese(new_param['name']):
-                            future = executor.submit(self.translate_text_with_deepl, new_param['name'])
-                            futures[future] = new_param
-                    for future in as_completed(futures):
-                        new_param = futures[future]
-                        new_param['name'] = future.result()
-                    self.data['skumodel']['sku_data']['sku_parameter'] = new_params
+    def process_skumodel(self):
+        # 获取skumodel键下需要翻译的文本
+        text = []
+        for value in self.data['skumodel']['sku_data']['sku_property_name'].values():
+            text.append(value)
+        for i in self.data['skumodel']['sku_data']['sku_parameter']:
+            text.append(i['name'])
 
-                elif specifications == 2:
-                    new_params = []
-                    future_to_param_and_original = dict()
-                    translated_values = dict()
-                    for param in self.data['skumodel']['sku_data']['sku_parameter']:
-                        new_param = deepcopy(param)
-                        new_params.append(new_param)
-                        sku1_value, sku2_value = new_param['name'].split('||')
-                        if self.is_chinese(sku1_value) and sku1_value not in translated_values:
-                            future = executor.submit(self.translate_text_with_deepl, sku1_value)
-                            future_to_param_and_original[future] = (new_param, sku1_value)
-                        if self.is_chinese(sku2_value) and sku2_value not in translated_values:
-                            future = executor.submit(self.translate_text_with_deepl, sku2_value)
-                            future_to_param_and_original[future] = (new_param, sku2_value)
-                    for future in as_completed(future_to_param_and_original.keys()):
-                        result = future.result()
-                        param, original_value = future_to_param_and_original[future]
-                        param['name'] = param['name'].replace(original_value, result)
-                        translated_values[original_value] = result
-                    for new_param in new_params:
-                        sku1_value, sku2_value = new_param['name'].split('||')
-                        if sku1_value in translated_values:
-                            sku1_value = translated_values[sku1_value]
-                        if sku2_value in translated_values:
-                            sku2_value = translated_values[sku2_value]
-                        new_param['name'] = sku1_value.replace('"', '') + '||' + sku2_value.replace('"', '')
-                    self.data['skumodel']['sku_data']['sku_parameter'] = new_params
+        # 判断列表长度进行拆分
+        sub_lists = self.split_list(text)
+        text_lists = []
+        for sub_list in sub_lists:
+            text_lists.extend(self.translate_text_with_deepl(sub_list))
+
+        # 开始依序替换原始数据
+        keys = list(self.data['skumodel']['sku_data']['sku_property_name'].keys())
+        for i, key in enumerate(keys):
+            self.data['skumodel']['sku_data']['sku_property_name'][key] = text_lists[i]
+        for i in range(len(tetx['data']['skumodel']['sku_data']['sku_parameter'])):
+            self.data['skumodel']['sku_data']['sku_parameter'][i]['name'] = text_lists[i + len(keys)]
 
     def process_title(self):
         self.data['title'] = self.translate_text_with_deepl(self.data['title']) if self.is_chinese(self.data['title']) \
             else self.data['title']
 
     def process_details_text_description(self):
-        new = []
-        for i in self.data['details_text_description']:
-            if self.is_chinese(i):
-                new.append(self.remove_last_dot(((self.translate_text_with_deepl(i)).replace(':', ': ').replace(":  ", ": "))))
-            else:
-                new.append(i)
-        self.data['details_text_description'] = new
+        # 获取skumodel键下需要翻译的文本
+        text = self.data['details_text_description']
+
+        # 判断列表长度进行拆分
+        sub_lists = self.split_list(text)
+
+        # 替换原始数据
+        text_lists = []
+        for sub_list in sub_lists:
+            text_lists.extend(self.translate_text_with_deepl(sub_list))
+        self.data['details_text_description'] = text_lists
 
     def process_all(self):
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {executor.submit(self.process_sku_property_name),
-                           executor.submit(self.process_sku_parameter),
-                           executor.submit(self.process_title),
-                           executor.submit(self.process_details_text_description)}
-                for future in futures:
-                    future.result()
-        except Exception as error:
-            logging.warning("deepl翻译多线程错误捕获: %s", error)
-            return False
-
+        self.process_title()
+        self.process_skumodel()
+        self.process_details_text_description()
         return self.data
+
+tetx = {
+  'status': True,
+  'data': {
+    'product_id': '771673382691',
+    'specifications': 1,
+    'start_amount': 1,
+    'title': '学生迷你小型自动折叠洗衣机清洗内衣裤洗袜子机洗脱两用洗衣神器',
+    'main_images': [
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg'
+      },
+      {
+        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.220x220.jpg',
+        'imageURI': 'img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.jpg',
+        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.search.jpg',
+        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.summ.jpg',
+        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.310x310.jpg',
+        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.jpg'
+      }
+    ],
+    'skumodel': {
+      'sku_data': {
+        'sku_property_name': {
+          'sku1_property_name': '颜色'
+        },
+        'sku_parameter': [
+          {
+            'remote_id': '771673382691_pLem9M2IHD',
+            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色',
+            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg',
+            'price': '39.90',
+            'stock': 4736
+          },
+          {
+            'remote_id': '771673382691_fZosay5khC',
+            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色',
+            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg',
+            'price': '39.90',
+            'stock': 4867
+          },
+          {
+            'remote_id': '771673382691_Y4HtLvCGYW',
+            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色',
+            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg',
+            'price': '39.90',
+            'stock': 4938
+          },
+          {
+            'remote_id': '771673382691_wxa4UqK3Xf',
+            'name': '【专用款】洗衣机洗涤专用粘毛器',
+            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg',
+            'price': '8.18',
+            'stock': 4665
+          },
+          {
+            'remote_id': '771673382691_ITQNNOMH2w',
+            'name': '单独沥水篮【无机器+洗衣机配件】',
+            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg',
+            'price': '11.90',
+            'stock': 4991
+          }
+        ]
+      }
+    },
+    'video': 'https://cloud.video.taobao.com/play/u/2217544969989/p/2/e/6/t/1/452076326629.mp4',
+    'details_text_description': [
+      '洗涤容量:2kg以下',
+      '电源方式:插电式',
+      '能效等级:1级',
+      '高度:70.1-75cm',
+      '电机类型:定频',
+      '宽度:29*29cm',
+      '深度:50.1cm以下;',
+      '材质:塑料,树脂',
+      '功能:可旋转',
+      '产品规格:29*29',
+      '颜色:4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色,4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色,4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】粉色,【专用款】洗衣机洗涤专用粘毛器,单独沥水篮【无机器+洗衣机配件】',
+      '重量:2kg',
+      '品牌:悠汇',
+      '3C证书编号:2019010713148672',
+      '产品类别:家用清洁',
+      '物流服务:物流点自提',
+      '型号:008',
+      '包装清单:单个包装',
+      '成色:全新'
+    ],
+    'detailed_picture': [
+      'https://cbu01.alicdn.com/img/ibank/O1CN01pzyCV52Nf1EVfjofk_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01YLYTIg2Nf1ESzHpbp_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01liNji12Nf1EO12vWL_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN019hQ9HQ2Nf1EP0k7BM_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN019FSEjO2Nf1EPRMLd7_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01ZHnDjN2Nf1ES4GKHA_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01ZooyXH2Nf1EVflMLL_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01M54Zj02Nf1ES4EBEz_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01iwHuO22Nf1ERFnaeY_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01bonTh02Nf1EO117J3_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN016vyKAx2Nf1ETS3fPq_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01CsHTex2Nf1ETS5sbY_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01UwSBdR2Nf1EUXdnQA_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01fdIDWN2Nf1EWKbTJc_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01mAhrAO2Nf1EWKcwpE_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01Nze8lu2Nf1EWKcwpP_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01Ojb2Sn2Nf1EUvv5Yl_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01REaXLg2Nf1ETS6cM8_!!2217544969989-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01JXzDXF2Nf1EREYj1h_!!2217544969989-0-cib.jpg'
+    ]
+  }
+}
+deepl_api = 'eaffb79e-edf7-447a-a76e-3e6ae3883e21'
+translator_deepl = Translator(tetx['data'], deepl_api)
+res = translator_deepl.process_title()
+print(tetx)
+
+
+
