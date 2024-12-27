@@ -344,7 +344,6 @@ if __name__ == '__main__':
             future = executor.submit(process_product, value, product_data, stop_event)
             futures.add(future)
 
-
         # 等待线程执行完毕
         while futures or max_workers == 1:
             done, futures = concurrent.futures.wait(futures, timeout=300, return_when=concurrent.futures.FIRST_COMPLETED)

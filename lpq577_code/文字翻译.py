@@ -48,6 +48,12 @@ class Translator:
         raise Exception("搜狗翻译请求失败")
 
     def translate_text_with_deepl(self, text):
+        # 对 text 进行格式化处理
+        for i in range(len(text)):
+            value = self.replace_brackets(text[i])
+            value = self.format_text(value)
+            text[i] = value
+
         auth_key = self.deepl_api
         deepl_url = "https://api.deepl.com/v2/translate"
         data = {
@@ -59,11 +65,11 @@ class Translator:
         attempt = 1
         while attempt <= 10:
             try:
-                response = requests.post(deepl_url, data=data, timeout=30)
+                response = requests.post(deepl_url, data=data, timeout=10)
                 if response.status_code != 200:
                     logging.warning(f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试")
                     continue
-                result = [i['text'] for i in response.json()["translations"]]
+                result = [(self.remove_last_dot(i['text'])).title() for i in response.json()["translations"]]
                 return result
             except Exception as e:
                 logging.warning(f"deepl翻译请求失败，尝试第{attempt}次. Error: {e}")
@@ -86,30 +92,108 @@ class Translator:
         # 将列表按照指定大小切分
         return [input_list[i:i + 50] for i in range(0, len(input_list), 50)]
 
+    def format_title(self, title):
+        lowercase_words = [
+            # 连接词和冠词
+            "and", "or", "but", "for", "nor", "so", "the", "a", "an", "in", "on", "at",
+            "by", "with", "from", "of", "to",
+
+            # 介词
+            "as", "about", "over", "under", "between", "among", "through", "into",
+            "during", "before", "after", "out", "without", "against", "across",
+
+            # 副词和其他常用词
+            "to", "up", "down", "off", "over", "around", "out", "under", "inside", "outside",
+            "again", "only", "just", "more", "less", "than",
+
+            # 品牌名的常见词汇
+            "store", "brand", "company", "shop",
+
+            # 常见动词和形容词（标题中间或结尾时）
+            "be", "have", "do", "is", "are", "was", "were", "will", "can", "make", "use",
+            "give", "take", "help", "get", "keep", "allow", "support", "easy", "fast",
+            "low", "high"
+        ]
+        # 遍历要替换成小写的指定词
+        for word in lowercase_words:
+            # 使用正则替换，忽略大小写，并将匹配到的词替换成小写
+            title = re.sub(r'\b' + re.escape(word) + r'\b', word.lower(), title, flags=re.IGNORECASE)
+        return title
+
+    def format_text(self, text):
+        return re.sub(r'[^\w\s.,!?:;\'"[\]+\-|]', '', text)
+
+    def replace_brackets(self, text):
+        # 替换【为[，】为]
+        text = re.sub(r'【', '[', text)
+        text = re.sub(r'】', ']', text)
+        return text
+
+    def format_brackets(self, text):
+        # 1. 如果 [ 前没有字符（即它是开头或前面有空格），不加空格；否则加一个空格
+        text = re.sub(r'(?<=\S)\[', ' [', text)
+
+        # 2. 确保 `[` 后面没有空格
+        text = re.sub(r'\[\s+', '[', text)
+
+        # 3. 确保 `]` 前面没有空格
+        text = re.sub(r'\s*\]', ']', text)
+
+        # 4. 确保 `]` 后面只有一个空格
+        text = re.sub(r'\](?!\s)', '] ', text)  # 如果 ] 后面没有空格，添加一个空格
+
+        return text
+
     def process_skumodel(self):
-        # 获取skumodel键下需要翻译的文本
-        text = []
-        for value in self.data['skumodel']['sku_data']['sku_property_name'].values():
-            text.append(value)
-        for i in self.data['skumodel']['sku_data']['sku_parameter']:
-            text.append(i['name'])
+        if self.data['specifications'] != 0:
+            sku_data = self.data['skumodel']['sku_data']
+            # 获取skumodel键下需要翻译的文本
+            text = set()
+            for value in sku_data['sku_property_name'].values():
+                text.add(value)
+            if self.data['specifications'] == 1:
+                for i in sku_data['sku_parameter']:
+                    text.add(i['name'])
+            elif self.data['specifications'] == 2:
+                for i in sku_data['sku_parameter']:
+                    sku1_value, sku2_value = i['name'].split('||')
+                    text.add(sku1_value)
+                    text.add(sku2_value)
 
-        # 判断列表长度进行拆分
-        sub_lists = self.split_list(text)
-        text_lists = []
-        for sub_list in sub_lists:
-            text_lists.extend(self.translate_text_with_deepl(sub_list))
+            # 判断列表长度进行拆分
+            sub_lists = self.split_list(list(text))
+            text_lists = []
+            for sub_list in sub_lists:
+                text_lists.extend(self.translate_text_with_deepl(sub_list))
 
-        # 开始依序替换原始数据
-        keys = list(self.data['skumodel']['sku_data']['sku_property_name'].keys())
-        for i, key in enumerate(keys):
-            self.data['skumodel']['sku_data']['sku_property_name'][key] = text_lists[i]
-        for i in range(len(tetx['data']['skumodel']['sku_data']['sku_parameter'])):
-            self.data['skumodel']['sku_data']['sku_parameter'][i]['name'] = text_lists[i + len(keys)]
+            # 开始依序替换原始数据
+            keys = list(sku_data['sku_property_name'].keys())
+            count = 1
+            for i, key in enumerate(keys):
+                value = text_lists[i]
+                if 'colour' in value.lower() or 'color' in value.lower():
+                    sku_data['sku_property_name'][key] = 'color'
+                elif 'size' in value:
+                    sku_data['sku_property_name'][key] = 'size'
+                else:
+                    value = re.sub(r'[\(\)]', '', re.sub(r' +', '_', value))
+                    if len(value) > 15:
+                        sku_data['sku_property_name'][key] = f'Variants_{count}'
+                    else:
+                        sku_data['sku_property_name'][key] = value
+                count += 1
+            for i in range(len(sku_data['sku_parameter'])):
+                value = self.format_brackets(((text_lists[i + len(keys)]).replace('"', '')))
+                value = (re.sub(r'\(.*?\)', '', value)).strip()
+                value = re.sub(r'(?<!\|)\|(?!\|)', '||', value)
+                value = re.sub(r'\s*\|\|', '||', value)
+                value = re.sub(r'\|\|\s*', '||', value)
+                sku_data['sku_parameter'][i]['name'] = value
 
     def process_title(self):
-        self.data['title'] = self.translate_text_with_deepl(self.data['title']) if self.is_chinese(self.data['title']) \
-            else self.data['title']
+        title = self.translate_text_with_deepl([self.data['title']])
+        title = self.format_title(title[0]).replace(',', '')
+        self.data['title'] = title
 
     def process_details_text_description(self):
         # 获取skumodel键下需要翻译的文本
@@ -122,6 +206,8 @@ class Translator:
         text_lists = []
         for sub_list in sub_lists:
             text_lists.extend(self.translate_text_with_deepl(sub_list))
+        for i in range(len(text_lists)):
+            text_lists[i] = self.format_brackets((((text_lists[i]).replace(':', ': ')).replace(":  ", ": ")))
         self.data['details_text_description'] = text_lists
 
     def process_all(self):
@@ -130,260 +216,10 @@ class Translator:
         self.process_details_text_description()
         return self.data
 
-tetx = {
-  'status': True,
-  'data': {
-    'product_id': '771673382691',
-    'specifications': 1,
-    'start_amount': 1,
-    'title': '学生迷你小型自动折叠洗衣机清洗内衣裤洗袜子机洗脱两用洗衣神器',
-    'main_images': [
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN017fRHBj2Nf1ETR8GbT_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN0141JK3u2Nf1EWJh9E7_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Ww4ILA2Nf1ERDaZcc_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Io2kQm2Nf1EOzqrRL_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01bBkeoO2Nf1EREt3t1_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01TYftHq2Nf1EO0k88I_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Hlvzmy2Nf1EP0OMUt_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01rvWXHv2Nf1ESynYYx_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01n3Omrd2Nf1ERzJOam_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OKVxoS2Nf1EUvZKvO_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01wi7fOX2Nf1EPQrnqH_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZjXkzW2Nf1EO0gEfm_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01BWJm8M2Nf1ERFWOun_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg'
-      },
-      {
-        'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.220x220.jpg',
-        'imageURI': 'img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.jpg',
-        'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.search.jpg',
-        'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.summ.jpg',
-        'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.310x310.jpg',
-        'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01WBtyx82Nf1EVfLRh9_!!2217544969989-0-cib.jpg'
-      }
-    ],
-    'skumodel': {
-      'sku_data': {
-        'sku_property_name': {
-          'sku1_property_name': '颜色'
-        },
-        'sku_parameter': [
-          {
-            'remote_id': '771673382691_pLem9M2IHD',
-            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色',
-            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01RVJiL82Nf1EP0CgMC_!!2217544969989-0-cib.jpg',
-            'price': '39.90',
-            'stock': 4736
-          },
-          {
-            'remote_id': '771673382691_fZosay5khC',
-            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色',
-            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01hGlRcs2Nf1ETeclQ5_!!2217544969989-0-cib.jpg',
-            'price': '39.90',
-            'stock': 4867
-          },
-          {
-            'remote_id': '771673382691_Y4HtLvCGYW',
-            'name': '4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色',
-            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01nyvxO02Nf1EP0GuOu_!!2217544969989-0-cib.jpg',
-            'price': '39.90',
-            'stock': 4938
-          },
-          {
-            'remote_id': '771673382691_wxa4UqK3Xf',
-            'name': '【专用款】洗衣机洗涤专用粘毛器',
-            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01CbevmK2Nf1EO0k8CU_!!2217544969989-0-cib.jpg',
-            'price': '8.18',
-            'stock': 4665
-          },
-          {
-            'remote_id': '771673382691_ITQNNOMH2w',
-            'name': '单独沥水篮【无机器+洗衣机配件】',
-            'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01fU0cza2Nf1EVfQszI_!!2217544969989-0-cib.jpg',
-            'price': '11.90',
-            'stock': 4991
-          }
-        ]
-      }
-    },
-    'video': 'https://cloud.video.taobao.com/play/u/2217544969989/p/2/e/6/t/1/452076326629.mp4',
-    'details_text_description': [
-      '洗涤容量:2kg以下',
-      '电源方式:插电式',
-      '能效等级:1级',
-      '高度:70.1-75cm',
-      '电机类型:定频',
-      '宽度:29*29cm',
-      '深度:50.1cm以下;',
-      '材质:塑料,树脂',
-      '功能:可旋转',
-      '产品规格:29*29',
-      '颜色:4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色,4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色,4L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+直流电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+USB电源】粉色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】蓝色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】绿色,8.5L【 洗衣机+沥水篮+排水+蓝光+定时+双供电（直流电源+USB）】粉色,【专用款】洗衣机洗涤专用粘毛器,单独沥水篮【无机器+洗衣机配件】',
-      '重量:2kg',
-      '品牌:悠汇',
-      '3C证书编号:2019010713148672',
-      '产品类别:家用清洁',
-      '物流服务:物流点自提',
-      '型号:008',
-      '包装清单:单个包装',
-      '成色:全新'
-    ],
-    'detailed_picture': [
-      'https://cbu01.alicdn.com/img/ibank/O1CN01pzyCV52Nf1EVfjofk_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01YLYTIg2Nf1ESzHpbp_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01liNji12Nf1EO12vWL_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN019hQ9HQ2Nf1EP0k7BM_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN019FSEjO2Nf1EPRMLd7_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01ZHnDjN2Nf1ES4GKHA_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01ZooyXH2Nf1EVflMLL_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01M54Zj02Nf1ES4EBEz_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01iwHuO22Nf1ERFnaeY_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01bonTh02Nf1EO117J3_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN016vyKAx2Nf1ETS3fPq_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01CsHTex2Nf1ETS5sbY_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01UwSBdR2Nf1EUXdnQA_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01fdIDWN2Nf1EWKbTJc_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01mAhrAO2Nf1EWKcwpE_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01Nze8lu2Nf1EWKcwpP_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01Ojb2Sn2Nf1EUvv5Yl_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01REaXLg2Nf1ETS6cM8_!!2217544969989-0-cib.jpg',
-      'https://cbu01.alicdn.com/img/ibank/O1CN01JXzDXF2Nf1EREYj1h_!!2217544969989-0-cib.jpg'
-    ]
-  }
-}
+
+tetx = {'status': True, 'data': {'product_id': '734990688469', 'specifications': 2, 'start_amount': 1, 'title': '美甲贴一件代发成品的甲片小红书假指甲美甲片美甲穿戴甲穿戴美甲', 'main_images': [{'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01xVCQ5t1bRBeUg3pg6_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01FV4cgw1bRBecsje6C_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01y80zeJ1bRBemTPawb_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.jpg'}, {'size220x220ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.220x220.jpg', 'imageURI': 'img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.jpg', 'searchImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.search.jpg', 'summImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.summ.jpg', 'size310x310ImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.310x310.jpg', 'fullPathImageURI': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.jpg'}], 'skumodel': {'sku_data': {'sku_property_name': {'sku1_property_name': '颜色', 'sku2_property_name': '颜色分类'}, 'sku_parameter': [{'remote_id': '734990688469_yaPxAhG427', 'name': '艳冠群芳【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9551}, {'remote_id': '734990688469_w0JvDHOa21', 'name': '艳冠群芳【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01OAQC9A1bRBef3wzwA_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9948}, {'remote_id': '734990688469_TT1qbDwFMt', 'name': '黑碟银链【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9956}, {'remote_id': '734990688469_rGzs7pOkvO', 'name': '黑碟银链【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01dUzuNc1bRBeZaYZM2_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9959}, {'remote_id': '734990688469_YqHVnyXh0G', 'name': '蓝山茶花【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9957}, {'remote_id': '734990688469_Bi6stqnEnH', 'name': '蓝山茶花【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01pBJL6R1bRBebmN6vC_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9959}, {'remote_id': '734990688469_soKdQGqcYM', 'name': '银河蝴蝶【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9960}, {'remote_id': '734990688469_SnC4D8ZcjK', 'name': '银河蝴蝶【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01ZdWuzE1bRBeYxzycQ_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9959}, {'remote_id': '734990688469_eE9RJB5b5l', 'name': '魔镜爱心【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9958}, {'remote_id': '734990688469_AIttIOKXsp', 'name': '魔镜爱心【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01OQaWFT1bRBeg7LiTR_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_ldDMBwAU5p', 'name': '花飞碟舞【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9960}, {'remote_id': '734990688469_PXldQCI3rI', 'name': '花飞碟舞【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Pw3n1w1bRBeZaXYy3_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_lIItZxAdcX', 'name': '粉驹兔子【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.jpg', 'price': '4.80', 'stock': 9958}, {'remote_id': '734990688469_GM82neoftd', 'name': '粉驹兔子【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01LoCWU21bRBeYy0Nb3_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_ZYWd5QjgU7', 'name': '法式蝴蝶【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9959}, {'remote_id': '734990688469_CtwS4XAUHe', 'name': '法式蝴蝶【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01x9I7Mk1bRBeegV8Cq_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_10EFi7lUCf', 'name': '果冻葡萄【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9959}, {'remote_id': '734990688469_VDjRyqt4O0', 'name': '果冻葡萄【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01nssuzv1bRBeiJyL3v_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_mgOCZkP4na', 'name': '蓝色爱心【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9958}, {'remote_id': '734990688469_QThb4NRpSH', 'name': '蓝色爱心【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Jq6HuS1bRBehThh9V_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9859}, {'remote_id': '734990688469_S09CZznX4U', 'name': '心心蝴蝶【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_22r1h6ft30', 'name': '心心蝴蝶【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01LsxUw71bRBef3x8Eu_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_Jo8vkMYUPs', 'name': '紫色云朵【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_mGiOcg5Q6A', 'name': '紫色云朵【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01sErJE91bRBebkyAh2_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9959}, {'remote_id': '734990688469_8KZJg25WpJ', 'name': '芭蕾爱心【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9939}, {'remote_id': '734990688469_uAJLfMCrkP', 'name': '芭蕾爱心【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01uXGDmv1bRBee1fxVm_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_FcMFp4ZuvC', 'name': '月光晕染【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_ZjnqeMhDzb', 'name': '月光晕染【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01pWsGIy1bRBeco4tep_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_XVe1VP7TOc', 'name': '珍珠爱心【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_fhLxffuQvz', 'name': '珍珠爱心【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01Qa5DyD1bRBegZGFCU_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9960}, {'remote_id': '734990688469_6rKIrYgWkS', 'name': '酒红银边【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_BrFEYruZlw', 'name': '酒红银边【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01GuoCMU1bRBeT8LQRc_!!2216396973461-0-cib.jpg', 'price': '5.50', 'stock': 9959}, {'remote_id': '734990688469_cu2aDYGQ4w', 'name': '长岛冰茶【短款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_IA8nDhc0vy', 'name': '长岛冰茶【短款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01z6pXIY1bRBeT8NuK4_!!2216396973461-0-cib.jpg', 'price': '4.60', 'stock': 9960}, {'remote_id': '734990688469_Jd9HdwFKEe', 'name': '爱心腮红【中长】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.jpg', 'price': '3.90', 'stock': 9960}, {'remote_id': '734990688469_LPKegKXSPF', 'name': '爱心腮红【中长】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01XkTknF1bRBeiJxfSz_!!2216396973461-0-cib.jpg', 'price': '4.60', 'stock': 9960}, {'remote_id': '734990688469_kl9SveVqbQ', 'name': '白边链条【长款】||【胶水款】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.jpg', 'price': '5.80', 'stock': 9959}, {'remote_id': '734990688469_WTVXEJMpVA', 'name': '白边链条【长款】||五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', 'imageUrl': 'https://cbu01.alicdn.com/img/ibank/O1CN01YEYIGb1bRBi1PfLAn_!!2216396973461-0-cib.jpg', 'price': '6.50', 'stock': 10000}]}}, 'video': 'https://cloud.video.taobao.com/play/u/2216396973461/p/2/e/6/t/1/424655918454.mp4', 'details_text_description': ['品牌:null', '颜色:艳冠群芳【中长】,黑碟银链【中长】,蓝山茶花【中长】,银河蝴蝶【中长】,魔镜爱心【中长】,花飞碟舞【短款】,粉驹兔子【短款】,法式蝴蝶【中长】,果冻葡萄【短款】,蓝色爱心【中长】,心心蝴蝶【短款】,紫色云朵【中长】,芭蕾爱心【中长】,月光晕染【短款】,珍珠爱心【中长】,酒红银边【短款】,长岛冰茶【短款】,爱心腮红【中长】,白边链条【长款】', '颜色分类:【胶水款】,五件套【果冻胶+胶水+指甲锉+酒精棉+木棒】', '风格:甜美,辣妹,爆闪,简约,欧美,轻奢风,纯欲', '款式:长款,中款,穿戴式,芭蕾型', '图案:星空,蝴蝶', '品牌类型:国货品牌', '非特化妆品备案证号:无', '特殊用途化妆品:否', '适用人群:女士'], 'detailed_picture': ['https://cbu01.alicdn.com/img/ibank/O1CN01tXwDNU1bRBf25TRHe_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01hgWLXC1bRBf3BWR9k_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01tEJpyZ1bRBezyR5rS_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01jD1Q6R1bRBezyUeHG_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01nJZ7aX1bRBeyBxdBe_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01pQ5bCE1bRBf3BXurd_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01JYaxO21bRBf7hMT1r_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01PtVO1J1bRBf6mKtz7_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN016yrgEN1bRBf8UFFlx_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01RVyCQH1bRBf37ncyo_!!2216396973461-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01w6WuLG1bRBf7hKBhP_!!2216396973461-0-cib.jpg']}}
+
 deepl_api = 'eaffb79e-edf7-447a-a76e-3e6ae3883e21'
 translator_deepl = Translator(tetx['data'], deepl_api)
-res = translator_deepl.process_title()
+res = translator_deepl.process_all()
 print(tetx)
-
-
-

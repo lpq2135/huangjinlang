@@ -100,24 +100,26 @@ class XiangJi:
                             # 如果翻译成功，更新图像URL
                             translated_image_url = response['Data']['Url']
                             images[idx] = translated_image_url  # 替换原始图片 URL
+                            success = True
                             break  # 跳出重试循环
                         else:
+                            logging.warning(f'象寄翻译请求失败, 重试第{retry_attempts}次')
                             retry_attempts += 1
+                            time.sleep(3)
 
                     except Exception as e:
-                        logging.warning(f'象寄翻译请求失败: {e}')
+                        logging.warning(f'象寄翻译请求失败, 重试第{retry_attempts}次')
                         retry_attempts += 1
+                        time.sleep(3)
 
-                logging.info("象寄密钥额度用完，正在尝试更新密钥")
+                if success:
+                    break
+
+                logging.info("象寄翻译异常，正在尝试更新密钥")
                 self.change_and_get_xiangji_key()
                 self.commitTime = str(int(time.time()))
                 if not self.is_available:
                     return None
-
-                if not success:
-                    # 如果 10 次重试都失败，更新密钥
-                    logging.warning(f"象寄翻译失败，尝试更新密钥")
-                    return None  # 如果三次重试都失败，直接结束程序
 
         return images  # 返回翻译后的图片列表
 
