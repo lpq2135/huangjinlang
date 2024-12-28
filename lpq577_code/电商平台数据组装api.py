@@ -20,7 +20,7 @@ class Alibaba:
             try:
                 request_url = f'https://m.1688.com/offer/{self.product_id}.htm'
                 response = requests.get(url=request_url, headers={'User-Agent': User_Agent}, timeout=30).text
-                if '下架商品页面' in response:
+                if '下架商品页面' in response or '无法查看或已下架' in response:
                     return False
                 sku_source = re.findall(r'(?<=window\.__INIT_DATA=).*', response)[0]
                 return json.loads(sku_source)
@@ -198,6 +198,8 @@ class Alibaba:
         else:
             return {'status': False, 'specifications': None, 'data': '商品已离线'}
 
-# res = Alibaba('734990688469')
-# res1 = res.build_product_package()
-# print(res1)
+
+if __name__ == '__main__':
+    res = Alibaba('738385274836')
+    res1 = res.build_product_package()
+    print(res1)

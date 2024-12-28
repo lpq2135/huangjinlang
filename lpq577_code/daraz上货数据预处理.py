@@ -16,7 +16,9 @@ from 数据库连接 import MySqlPool
 from 文字翻译 import Translator
 from 电商平台数据组装api import Alibaba
 from 象寄翻译 import XiangJi
-
+from itertools import cycle
+from threading import Event
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_completed
 
 # 获取店铺的 access_token 和其他相关信息
 def get_access_token():
@@ -41,7 +43,7 @@ def get_product_data():
     cnx, cursor = mysql_pool.get_conn()
     try:
         cursor.execute(
-            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 10",
+            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 200",
             (account,))
         rows = cursor.fetchall()
         return None if not rows else rows
@@ -162,14 +164,12 @@ def access_token_deal_with(rows):
 
 
 # 处理每个商品的具体任务
-def process_product(value, product_data, event):
-    # 检查是否设置了停止事件
-    if event.is_set():
-        logging.info("程序终止，请检查相关异常")
+def process_product(value, product_data, stop_event):
+    if stop_event.is_set():
+        logging.info("检测到停止事件，终止任务执行")
         return
 
     product_id = product_data[2]
-
     # 使用 Alibaba 类来处理商品数据
     logging.info(f'{product_id}-获取成功-开始请求数据包')
     product_object = Alibaba(product_id)
@@ -204,8 +204,8 @@ def process_product(value, product_data, event):
 
             # 如果象寄翻译返回为空，停止后续线程任务
             if not main_images:
-                logging.warning(f'{threading.get_ident()}-{product_id}-象寄翻译返回为空, 停止继续启动新的线程')
-                event.set()  # 设置停止事件，通知其他线程停止
+                logging.warning(f'{product_id}-象寄翻译返回为空, 停止继续启动新的线程')
+                stop_event.set()    # 设置停止事件，通知其他线程停止
                 return
 
         # 获取商品重量，并准备上货数据包
@@ -297,14 +297,8 @@ if __name__ == '__main__':
         time.sleep(5)
         sys.exit()
 
-    product_data_list = []
     max_workers = min(10, len(access_token_data))  # 最大线程数
     logging.info(f'当前工作线程数量：{max_workers}')
-
-    # 创建一个锁对象
-    lock = threading.Lock()
-    futures = set()  # 用于存储线程的 future 对象
-    cyclic_values = itertools.cycle(access_token_data.values())  # 循环的账号数据
 
     # 创建 XiangJi 实例
     img_translate = XiangJi(account, mysql_pool)
@@ -317,44 +311,25 @@ if __name__ == '__main__':
         time.sleep(5)
         sys.exit()
 
-    # 创建一个 threading.Event 实例，用于线程间同步
-    stop_event = threading.Event()
-    # 启动线程池处理任务
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交初始的线程任务
-        for _ in range(max_workers):
-            with lock:
-                if len(product_data_list) ==0 :
-                    product_new_data = get_product_data()
-                    if product_new_data:
-                        product_data_list.extend(product_new_data)
-                    else:
-                        logging.error('数据库无商品id')
-                        time.sleep(5)
-                        sys.exit()
-                product_data = product_data_list.pop(0)
+    access_token_cycle = cycle(access_token_data.values())  # 创建access_token的无限迭代器
+    stop_event = Event()  # 假设的停止事件
+    main_pool = ThreadPoolExecutor(max_workers=max_workers)  # 主线程池
 
-            value = next(cyclic_values)
-            future = executor.submit(process_product, value, product_data, stop_event)
-            futures.add(future)
+    while True:
+        tasks = []  # 存储任务的列表
+        product_data_list = get_product_data()
+        if not product_data_list:
+            break  # 如果没有数据了，就结束循环
 
-        # 等待线程执行完毕
-        while futures or max_workers == 1:
-            done, futures = concurrent.futures.wait(futures, timeout=300, return_when=concurrent.futures.FIRST_COMPLETED)
+        # 每次循环时逐个提交任务
+        for product_data in product_data_list:
+            access_token = next(access_token_cycle)  # 获取下一个 access_token
+            task = main_pool.submit(process_product, access_token, product_data, stop_event)
+            tasks.append(task)  # 将任务添加到列表
 
-            with lock:
-                if stop_event.is_set():  # 如果事件已设置，停止所有工作
-                    break
-                if product_data_list:
-                    value = next(cyclic_values)
-                    product_data = product_data_list.pop(0)
-                    future = executor.submit(process_product, value, product_data, stop_event)
-                    futures.add(future)
-                else:
-                    product_new_data = get_product_data()
-                    if product_new_data:
-                        product_data_list.extend(product_new_data)
-                    else:
-                        logging.error('数据库无商品数据')
-                        time.sleep(5)
-                        sys.exit()
+        wait(tasks, return_when=ALL_COMPLETED)  # 等待所有任务执行完毕
+
+        # 如果检测到停止事件被设置，终止整个循环
+        if stop_event.is_set():
+            logging.info("检测到停止事件，终止任务执行")
+            break
