@@ -107,7 +107,7 @@ class XiangJi:
                             retry_attempts += 1
                             time.sleep(3)
 
-                    except Exception as e:
+                    except Exception:
                         logging.warning(f'象寄翻译请求失败, 重试第{retry_attempts}次')
                         retry_attempts += 1
                         time.sleep(3)
@@ -122,7 +122,6 @@ class XiangJi:
                     return None
 
         return images  # 返回翻译后的图片列表
-
 
 
 # mysql_pool = MySqlPool(host='47.122.62.157', password='Qiang123@', user='daraz', database='daraz')
