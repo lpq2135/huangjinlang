@@ -232,6 +232,7 @@ def process_product(value, product_data, stop_event):
 
         # 循环遍历要上传的站点数据
         for i in value:
+            logging.info(f'{product_id}-开始进行{i[1]}上货处理')
             upload_site = i[1].lower()
             skumodel_new = copy.deepcopy(data_packet_translate['skumodel'])
 
@@ -240,7 +241,6 @@ def process_product(value, product_data, stop_event):
                 attrs['skumodel'] = skumodel_new  # 更新数据包中的价格信息
 
                 # 创建上货请求并上传商品
-                logging.info(f'-{product_id}-开始进行{i[1]}上货处理')
                 daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
                 upload_results = daraz_product.create_product()
 

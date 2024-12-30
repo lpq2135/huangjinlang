@@ -36,8 +36,8 @@ class Helper:
             else:
                 raise ValueError('Invalid method: {}'.format(method))
 
-            response.raise_for_status()  # Ensures success. If not successful, raises exception.
-            return response.json()  # Assumes server response is in JSON format.
+            response.raise_for_status()
+            return response.json()
         except requests.exceptions.HTTPError as http_err:
             logging.warning('HTTP error occurred: {}'.format(http_err))
         except Exception as err:
@@ -612,8 +612,7 @@ class DarazProduct(Helper):
                     return {'upload_site': self.upload_site, 'upload_code': 5, 'product_id': self.product_id, 'data': '数据包错误(异常请求)'}
                 else:
                     return {'upload_site': self.upload_site, 'upload_code': -2, 'product_id': self.product_id, 'data': result['detail']}
-        return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
-                'data': False}
+        return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id, 'data': self.category_attributes['data']}
 
     def get_product_item(self):
         """

@@ -75,16 +75,20 @@ class Translator:
         raise Exception("deepl翻译请求失败")
 
     def remove_last_dot(self, str):
-        if str[-1] == '.':
-            str = str[:-1]
-        str = str.rstrip()
-        return str
+        """
+        去掉字符串末尾的点号，并去除尾部空格。
+        :param str: 输入字符串
+        :return: 处理后的字符串
+        """
+        return str.rstrip('.').strip()
 
     def is_chinese(self, check_str):
-        for ch in check_str:
-            if ('\u4e00' <= ch <= '\u9fff') and ch != '，':
-                return True
-        return False
+        """
+        检查字符串是否包含中文字符。
+        :param check_str: 输入字符串
+        :return: 如果包含中文字符返回True，否则返回False
+        """
+        return bool(re.search(r'[\u4e00-\u9fff]', check_str))
 
     def split_list(self, input_list):
         # 将列表按照指定大小切分

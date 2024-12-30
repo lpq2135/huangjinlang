@@ -24,7 +24,7 @@ class XiangJi:
         """
         cnx, cursor = self.mysql_pool.get_conn()
         try:
-            cursor.execute("SELECT user_key, img_trans_key FROM xiangji_key WHERE account = %s AND status = '0' LIMIT 10 ", (self.account,))
+            cursor.execute("SELECT user_key, img_trans_key FROM xiangji_key WHERE account = %s AND status = '0' LIMIT 100 ", (self.account,))
             rows = cursor.fetchall()
             if rows is None:
                 logging.warning('数据库无象寄翻译密匙')
@@ -32,6 +32,7 @@ class XiangJi:
                 return None
             else:
                 logging.info(f'象寄密匙列表获取成功')
+                self.is_available = True
                 return rows
         except Exception as e:
             logging.warning("象寄数据库获取数据异常: ", str(e))
