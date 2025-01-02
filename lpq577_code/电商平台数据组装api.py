@@ -50,6 +50,12 @@ class Alibaba:
     def get_main_images(self):
         return self.source['globalData']['images']
 
+    def get_unit_weight(self):
+        unit_weight = self.source['globalData']['skuModel']['extraInfo']['freightInfo']['unitWeight']
+        if unit_weight == 0:
+            unit_weight = next(iter(self.source['globalData']['skuModel']['extraInfo']['freightInfo']['skuWeight'].values()), None)
+        return unit_weight
+
     def get_current_price(self):
         data = self.first_non_empty_item_in_data('priceModel')
         if data and 'priceModel' in data:
@@ -183,6 +189,7 @@ class Alibaba:
                     product_package = {
                         'product_id': self.product_id,
                         'specifications': specifications,
+                        'unit_weight': self.get_unit_weight(),
                         'start_amount': self.get_start_amount(),
                         'title': self.get_title(),
                         'main_images': self.get_main_images(),
@@ -200,6 +207,6 @@ class Alibaba:
 
 
 if __name__ == '__main__':
-    res = Alibaba('716047473358')
+    res = Alibaba('818230844555')
     res1 = res.build_product_package()
     print(res1)

@@ -1,98 +1,106 @@
 import sys
-from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QVBoxLayout,
-                             QHBoxLayout)
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QLineEdit,
+    QCheckBox,
+    QPushButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QComboBox,
+    QWidget,
+)
+from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtCore import Qt
 
 
-class LoginPage(QWidget):
+class LoginApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.background_label = None
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('D小秘')
+        # 设置窗口标题和大小
+        self.setWindowTitle("黄金浪电商erp")
+        self.resize(800, 600)
 
-        # 获取屏幕的尺寸，设置窗口初始大小
-        screen = QApplication.primaryScreen().availableGeometry()
-        window_width = int(screen.width() * 0.6)
-        window_height = int(screen.height() * 0.8)
-
-        # 设置固定大小窗口
-        self.setFixedSize(window_width, window_height)
-        self.center()
-
-        layout = QVBoxLayout()
-
-        # 设置背景标签
+        # 设置背景图片
         self.background_label = QLabel(self)
-        pixmap = QPixmap(r'C:\Users\Administrator\Desktop\未命名(6).png')
-        self.set_background(pixmap)  # 设置背景图片并适应窗口
+        self.background_pixmap = QPixmap(r"C:\\Users\\Administrator\\Desktop\\未命名(6).png")  # 替换为你的背景图片路径
+        self.background_label.setPixmap(self.background_pixmap)
+        self.background_label.setScaledContents(True)  # 自适应窗口大小
+        self.background_label.setGeometry(self.rect())  # 设置为整个窗口
 
-        layout.addWidget(self.background_label)
+        # 主布局
+        main_layout = QHBoxLayout()  # 水平布局
 
-        # 登录表单
-        self.username_label = QLabel('用户名:')
+        # 功能部分布局（左侧）
+        function_layout = QVBoxLayout()
+        function_layout.addStretch(2)  # 增加顶部空白，进一步下移组件
+
+        # 用户名输入
+        username_label = QLabel("用户名：")
+        username_label.setFont(QFont("Arial", 12))
         self.username_input = QLineEdit()
-        self.password_label = QLabel('密码:')
+        self.username_input.setPlaceholderText("请输入用户名")
+        self.username_input.setFixedWidth(300)
+
+        # 密码输入
+        password_label = QLabel("密码：")
+        password_label.setFont(QFont("Arial", 12))
         self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("请输入密码")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setFixedWidth(300)
 
-        self.login_button = QPushButton('登录')
-        self.login_button.clicked.connect(self.handleLogin)
+        # 记住我
+        self.remember_checkbox = QCheckBox("记住")
+        self.remember_checkbox.setFont(QFont("Arial", 12))
 
-        form_layout = QVBoxLayout()
-        form_layout.addWidget(self.username_label)
-        form_layout.addWidget(self.username_input)
-        form_layout.addWidget(self.password_label)
-        form_layout.addWidget(self.password_input)
+        # 登录按钮
+        login_button = QPushButton("登录")
+        login_button.setFont(QFont("Arial", 14))
+        login_button.setFixedWidth(100)
+        login_button.clicked.connect(self.on_login)
 
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(self.login_button)
-        button_layout.addStretch()
+        # 将功能组件加入布局
+        function_layout.addWidget(username_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addWidget(self.username_input, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addWidget(password_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addWidget(self.password_input, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addWidget(self.remember_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addWidget(login_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        function_layout.addStretch(1)  # 添加底部空白，调整组件位置
 
-        layout.addLayout(form_layout)
-        layout.addLayout(button_layout)
+        # 右侧图片
+        image_label = QLabel(self)
+        image_pixmap = QPixmap("logo.png")  # 替换为你的右侧图像路径
+        image_pixmap = image_pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio)
+        image_label.setPixmap(image_pixmap)
+        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.setLayout(layout)
+        # 将子布局加入主布局
+        main_layout.addLayout(function_layout)  # 功能布局在左侧
+        main_layout.addWidget(image_label)  # 图片在右侧
 
-    def set_background(self, pixmap):
-        """根据窗口大小设置背景图片"""
-        # 获取窗口的当前大小
-        window_size = self.size()
-        # 根据窗口大小调整图片尺寸，保持比例
-        pixmap = pixmap.scaled(window_size, Qt.AspectRatioMode.KeepAspectRatio)
-        self.background_label.setPixmap(pixmap)
-        self.background_label.setScaledContents(True)
-
-    def center(self):
-        """使窗口居中"""
-        screen = QApplication.primaryScreen().availableGeometry()
-        size = self.geometry()
-        self.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
-
-    def handleLogin(self):
-        """处理登录逻辑"""
-        username = self.username_input.text()
-        password = self.password_input.text()
-
-        if username == 'admin' and password == '1234':
-            QMessageBox.information(self, '成功', '登录成功！')
-        else:
-            QMessageBox.warning(self, '失败', '用户名或密码错误！')
+        # 设置主布局
+        self.setLayout(main_layout)
 
     def resizeEvent(self, event):
-        """当窗口大小改变时，更新背景图片"""
-        if self.background_label:
-            pixmap = QPixmap(r'C:\Users\Administrator\Desktop\未命名(6).png')
-            self.set_background(pixmap)
+        """
+        重写 resizeEvent，让背景图片自适应窗口大小
+        """
+        self.background_label.setGeometry(self.rect())  # 调整背景图片大小
         super().resizeEvent(event)
 
+    def on_login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        print(f"用户名：{username}, 密码：{password}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app = QApplication(sys.argv)
-    login = LoginPage()
-    login.show()
+    window = LoginApp()
+    window.show()
     sys.exit(app.exec())

@@ -131,6 +131,14 @@ class Translator:
         text = re.sub(r'】', ']', text)
         return text
 
+    def replace_sku_value(self, text):
+        # 格式化详情文字
+        text = re.sub(r'\(.*?\)', '', text)
+        text = text.replace('"', '')
+        text = text.replace(',', '+')
+        text = text.replace('and', '+')
+        return text
+
     def format_brackets(self, text):
         # 1. 如果 [ 前没有字符（即它是开头或前面有空格），不加空格；否则加一个空格
         text = re.sub(r'(?<=\S)\[', ' [', text)
@@ -198,15 +206,14 @@ class Translator:
             if self.data['specifications'] == 1:
                 for i in sku_data['sku_parameter']:
                     value = text_lists[text_list.index(i['name'])]
-                    value = (re.sub(r'\(.*?\)', '', value))
-                    i['name'] = value
+                    i['name'] = self.replace_sku_value(value)
 
             elif self.data['specifications'] == 2:
                 for i in sku_data['sku_parameter']:
                     value_1, value_2 = i['name'].split('||')
                     sku1_value = text_lists[text_list.index(value_1)]
                     sku2_value = text_lists[text_list.index(value_2)]
-                    i['name'] = sku1_value.replace('"', '') + '||' + sku2_value.replace('"', '')
+                    i['name'] = self.replace_sku_value(sku1_value) + '||' + self.replace_sku_value(sku2_value)
 
     def process_title(self):
         title = self.translate_text_with_deepl([self.data['title']])
@@ -226,7 +233,7 @@ class Translator:
         for sub_list in sub_lists:
             text_lists.extend(self.translate_text_with_deepl(sub_list))
         for i in range(len(text_lists)):
-            if self.is_chinese(text_lists[i]) or 'Color:' in text_lists[i]:
+            if self.is_chinese(text_lists[i]) or (text_lists[i]).count(',') >= 4:
                 continue
             new_text_lists.append(text_lists[i])
         self.data['details_text_description'] = new_text_lists

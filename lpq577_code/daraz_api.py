@@ -646,7 +646,7 @@ def processing_price(upload_site, data, weight):
             i['price'] = calculate_local_price(upload_site, i['price'], weight)
         if upload_site == 'pk':
             pk_price_exceeds_percentage = calculate_price_percentage(sku_parameter, 4600)
-            if pk_price_exceeds_percentage <= 0.3:
+            if pk_price_exceeds_percentage <= 0.2:
                 data['sku_data']['sku_parameter'] = [item for item in sku_parameter if item['price'] <= 4600]
                 if data['sku_data']['sku_parameter']:
                     return True
@@ -678,7 +678,7 @@ def calculate_local_price(upload_site, original_price, weight):
         payment_fee = 0.08  # 回款手续费
         first_leg_cross_border_freight = 65 / usd_to_cny * weight if weight <= 0.15 else 80 / usd_to_cny * weight  # 头程跨境运费
     elif upload_site == 'bd':
-        acceptance_rate = 0.6  # 签收率
+        acceptance_rate = 0.7  # 签收率
         dommission_rate = 0.089  # 产品佣金（类目）
         us_to_local = 119.15  # 孟加拉塔卡-美金 汇率
         order_handling_fee = 0.05  # usd
