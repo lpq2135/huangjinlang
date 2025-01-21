@@ -63,7 +63,7 @@ class Translator:
         attempt = 1
         while attempt <= 10:
             try:
-                response = requests.post(deepl_url, data=data, timeout=10)
+                response = requests.post(deepl_url, data=data, timeout=30)
                 if response.status_code != 200:
                     logging.warning(f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试")
                     continue

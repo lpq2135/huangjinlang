@@ -116,7 +116,7 @@ class XiangJi:
                 else:
                     self.api_list = self.get_xiangji_key()
                     if not self.is_available:
-                        return None
+                        return {'status_code': 1}
         url = 'https://api.tosoiot.com'
         for idx, i in enumerate(images[:max_count]):
             success = False
@@ -161,13 +161,24 @@ class XiangJi:
                                     else:
                                         self.api_list = self.get_xiangji_key()
                                         if not self.is_available:
-                                            return None
+                                            return {'status_code': 1}
                         else:
                             logging.warning(f'象寄翻译请求失败, 重试第{retry_attempts + 1}, api_key: {api_key}, product_id: {product_id}')
                             retry_attempts += 1
                             time.sleep(3)
 
                     except Exception as e:
+                        response = requests.get(i)
+                        # 获取 ETag 或 Last-Modified
+                        etag = response.headers.get('ETag')
+                        last_modified = response.headers.get('Last-Modified')
+                        headers = {
+                            'If-None-Match': etag,  # 使用 ETag 来检查资源是否修改
+                            'If-Modified-Since': last_modified,  # 使用 Last-Modified 来检查资源是否修改
+                        }
+                        response = requests.get(i, headers=headers)
+                        if response.status_code == 304:
+                            return {'status_code': 2}
                         logging.warning(f'象寄翻译请求失败, 重试第{retry_attempts + 1}次, api_key: {api_key}, product_id: {product_id}, 错误: {str(e)}')
                         retry_attempts += 1
                         time.sleep(3)
@@ -186,15 +197,24 @@ class XiangJi:
                         else:
                             self.api_list = self.get_xiangji_key()
                             if not self.is_available:
-                                return None
+                                return {'status_code': 1}
         self.image_translation_record(product_id, images[0])
-        return images  # 返回翻译后的图片列表
+        return {'status_code': 0, 'images': images}
 
 
 if __name__ == '__main__':
     mysql_pool = MySqlPool(host='47.122.62.157', password='Qiang123@', user='daraz', database='daraz')
-    images = ['https://cbu01.alicdn.com/img/ibank/O1CN01CDeHBa23WVdjJaL1F_!!2218387277263-0-cib.jpg','https://cbu01.alicdn.com/img/ibank/O1CN01hr3pME23WVdlp1ev6_!!2218387277263-0-cib.jpg']
-    res = XiangJi(account='shaojie', mysql_pool=mysql_pool)
-    # res1 = res.xiangji_image_translate(images, 1, 1000974660)
-    res1 = res.get_image_link(1000974660)
+    images = [
+      'https://cbu01.alicdn.com/img/ibank/O1CN01ylfX6W2G5ZDeDbCiB_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN013Np2c12G5ZDQPX7LD_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01rQPqrW2G5ZDV2Y5m9_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01TNW7I92G5ZDZuCDMm_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN016C8vM52G5ZDYlK362_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01jeCge02G5ZDVXe9La_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN011EDHTc2G5ZDUR5zsV_!!2196368964-0-cib.jpg',
+      'https://cbu01.alicdn.com/img/ibank/O1CN01skcmPn2G5ZDYjO2vE_!!2196368964-0-cib.jpg'
+    ]
+    res = XiangJi(account='yilin', mysql_pool=mysql_pool)
+    res1 = res.xiangji_image_translate(images, 1, 720629938251)
+    # res1 = res.get_image_link(1000974660)
     print(res1)

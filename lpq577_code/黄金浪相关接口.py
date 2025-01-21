@@ -4,14 +4,13 @@ import base64
 import gzip
 import daraz_api
 import json
+import 图鉴打码
 
 from flask import Flask, request
 from logging_config import logging
 from 电商平台数据组装api import Alibaba
 
-
 app = Flask(__name__)
-
 
 def user_authentication(account, password):
     """
@@ -32,7 +31,6 @@ def user_authentication(account, password):
     finally:
         cursor.close()
         cnx.close()
-
 
 @app.route('/deepl/translate', methods=['post'])
 def translate_text_with_deepl():
@@ -57,7 +55,6 @@ def translate_text_with_deepl():
             logging.warning(f"deepl翻译请求失败，尝试第{_ + 1}次. Error: {e}")
     raise Exception("deepl翻译请求失败")
 
-
 @app.route('/auth/token/create', methods=['post'])
 def auth_token_create():
     code = request.values.get('code')
@@ -66,18 +63,21 @@ def auth_token_create():
     store_information = product.generate_access_token(code)
     return store_information
 
-@app.route('/format_alibaba_for_daraz', methods=['post'])
-def format_alibaba_v2():
+@app.route('/format_alibaba', methods=['post'])
+def format_alibaba():
     product_id = request.values.get('product_id')
-    source = json.loads(gzip.decompress(base64.b64decode(request.values.get('source').strip().replace(' ', '+'))).decode(
-        'utf-8'))
-    alibaba_instance = Alibaba(product_id, source)
-    if alibaba_instance.source:
-        product_package_data = alibaba_instance.build_product_package()
-        if product_package_data['status']:
-            json_data = json.dumps(product_package_data['data'], ensure_ascii=False)
-            return json_data
-    return product_package_data
+    alibaba_instance = Alibaba(product_id)
+    weight = alibaba_instance.get_unit_weight()
+    return str(weight)
+
+@app.route('/handling_verification_codes', methods=['post'])
+def handling_verification_codes():
+    img_path = request.values.get('img_path')
+    uname = request.values.get('uname')
+    pwd = request.values.get('pwd')
+    typeid = request.values.get('typeid')
+    result = 图鉴打码.base64_api(uname=uname, pwd=pwd, img=img_path, typeid=typeid)
+    return result
 
 
 app.run(host='0.0.0.0', port=8803, debug=False)

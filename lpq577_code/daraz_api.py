@@ -128,22 +128,34 @@ class DarazProduct(Helper):
         """
         一次性上传多张网络图片
         """
-        photo_data = {"Request": {"Images": {"Url": images}}}
-        xml_photo_data = xmltodict.unparse(photo_data)
-        parameters = {
-            'payload': xml_photo_data,
-            'access_token': self.access_token,
-            'app_key': self.app_key,
-            'sign_method': 'sha256',
-            'timestamp': self.timestamp
-        }
-        url = self.build_url(parameters, '/images/migrate')
-        try:
-            response = self.perform_request(url, 'post')
-            batch_id = response['batch_id']
-            return self.image_response_get(batch_id)
-        except Exception as e:
-            logging.warning(f"daraz网络图片获取batch_id失败: {e}")
+        retry = 0
+        while True:
+            photo_data = {"Request": {"Images": {"Url": images}}}
+            xml_photo_data = xmltodict.unparse(photo_data)
+            parameters = {
+                'payload': xml_photo_data,
+                'access_token': self.access_token,
+                'app_key': self.app_key,
+                'sign_method': 'sha256',
+                'timestamp': self.timestamp
+            }
+            url = self.build_url(parameters, '/images/migrate')
+            try:
+                response = self.perform_request(url, 'post')
+                batch_id = response['batch_id']
+                result = self.image_response_get(batch_id)
+                if result['status_code'] == 0:
+                    logging.info(f"{self.product_id}-{self.upload_site}-图片上传daraz服务器成功")
+                    return result['data']
+                elif result['status_code'] == 1:
+                    retry += 1
+                    time.sleep(2)
+                    logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次")
+                elif result['status_code'] == 2:
+                    return None
+            except Exception:
+                retry += 1
+                logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次")
 
     def migrate_image(self, images):
         """
@@ -163,13 +175,13 @@ class DarazProduct(Helper):
             response = self.perform_request(url, 'post')
             return response['data']['url']
         except Exception as e:
-            logging.warning(f"daraz网络图片上传失败（单张）: {e}")
+            logging.warning(f"{self.product_id}-daraz网络图片上传失败（单张）: {e}")
 
     def image_response_get(self, batch_id):
         """
         针对MigrateImages API的返回信息
         """
-        for _ in range(5):
+        for _ in range(3):
             parameters = {
                 'batch_id': batch_id,
                 'access_token': self.access_token,
@@ -181,9 +193,20 @@ class DarazProduct(Helper):
             try:
                 time.sleep(3)
                 response = self.perform_request(url, 'get')
-                return [i['url'] for i in response['data']['images']]
+                if response['code'] == '0':
+                    images = [i['url'] for i in response['data']['images']]
+                    return {'status_code': 0, 'data': images}
+                elif response['code'] == '1000':
+                    return {'status_code': 1, 'data': None}
+                elif response['code'] == '301':
+                    return {'status_code': 2, 'data': None}
+                else:
+                    logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次")
+                    time.sleep(3)
             except Exception:
-                logging.warning(f"daraz网络图片获取异常（多张）,重试第{_ + 1}次")
+                logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次")
+                time.sleep(3)
+        return {'status_code': 1, 'data': None}
 
     def get_category_attributes(self):
         """
@@ -220,6 +243,8 @@ class DarazProduct(Helper):
                     return is_mandatory_attributes, is_mandatory_sku
                 elif result['code'] == '4228':
                     return {'status': False, 'data': '此类目在该站点不合法'}
+                elif result['code'] == '4227':
+                    return {'status': False, 'data': '此类目在该站点不存在'}
                 elif result['code'] == 'IllegalAccessToken':
                     return {'status': False, 'data': 'access_token异常'}
             except Exception as e:
@@ -280,7 +305,7 @@ class DarazProduct(Helper):
             photo_name = promotion_whitebkg_image['photo_name']
             photo_xpath = r'D:/Daraz运营工具/Daraz采集组装工具/附件库/图片下载/' + photo_name
         # 获取详情文字
-        details_text_description = self.attrs.get('details_text_description')
+        details_text_description = self.attrs.get('details_text_description') if self.attrs.get('details_text_description') else []
         # 处理详情图片成html格式
         detailed_picture_html = "".join(f'<img src="{url}" alt="Image">' for url in self.attrs.get('detailed_picture'))
 
@@ -572,47 +597,52 @@ class DarazProduct(Helper):
         """
         if 'status' not in self.category_attributes:
             product_Skus, variation, sku_transformation_list = self.assembly_skus()
-            json_product_data = {
-                "Request": {
-                    "Product": {
-                        "PrimaryCategory": self.attrs.get('primary_category'),
-                        "Images": {"Image": self.migrate_images(self.attrs.get('main_images'))},
-                        "Attributes": self.assembly_attributes(sku_transformation_list),
-                        "Skus": product_Skus,
+            images = self.migrate_images(self.attrs.get('main_images'))
+            if images:
+                json_product_data = {
+                    "Request": {
+                        "Product": {
+                            "PrimaryCategory": self.attrs.get('primary_category'),
+                            "Images": {"Image": images},
+                            "Attributes": self.assembly_attributes(sku_transformation_list),
+                            "Skus": product_Skus,
+                        }
                     }
                 }
-            }
-            if variation:
-                json_product_data["Request"]["Product"]["variation"] = variation
-            xml_product_data = xmltodict.unparse(json_product_data)
-            parameters = {
-                'payload': xml_product_data,
-                'app_key': self.app_key,
-                'sign_method': 'sha256',
-                'access_token': self.access_token,
-                'timestamp': self.timestamp,
-            }
-            sign = self.sign(parameters, '/product/create')
-            url = self.site_url + '/product/create'
-            parameters['sign'] = sign
-            time.sleep(3)
-            for _ in range(5):
-                result = self.perform_request(url, 'post', data=parameters)
-                if result['code'] == '0':
-                    return {'upload_site': self.upload_site, 'upload_code': 0, 'product_id': self.product_id, 'data': '商品上传成功', 'item_id': result['data']['item_id']}
-                elif result['code'] == 'ApiCallLimit':
-                    time.sleep(3)
-                elif result['code'] == '500':
-                    time.sleep(3)
-                elif result['code'] == 'IllegalAccessToken':
-                    return {'upload_site': self.upload_site, 'upload_code': -1, 'product_id': self.product_id, 'data': 'accesstoken错误'}
-                elif result['code'] == '4221':
-                    return {'upload_site': self.upload_site, 'upload_code': 4221, 'product_id': self.product_id, 'data': '平台限制产品上传(可能违规)'}
-                elif result['code'] == '5':
-                    return {'upload_site': self.upload_site, 'upload_code': 5, 'product_id': self.product_id, 'data': '数据包错误(异常请求)'}
-                else:
-                    return {'upload_site': self.upload_site, 'upload_code': -2, 'product_id': self.product_id, 'data': result['detail']}
-        return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id, 'data': self.category_attributes['data']}
+                if variation:
+                    json_product_data["Request"]["Product"]["variation"] = variation
+                xml_product_data = xmltodict.unparse(json_product_data)
+                parameters = {
+                    'payload': xml_product_data,
+                    'app_key': self.app_key,
+                    'sign_method': 'sha256',
+                    'access_token': self.access_token,
+                    'timestamp': self.timestamp,
+                }
+                sign = self.sign(parameters, '/product/create')
+                url = self.site_url + '/product/create'
+                parameters['sign'] = sign
+                time.sleep(3)
+                for _ in range(6):
+                    result = self.perform_request(url, 'post', data=parameters)
+                    if result['code'] == '0':
+                        return {'upload_site': self.upload_site, 'upload_code': 0, 'product_id': self.product_id, 'data': '商品上传成功', 'item_id': result['data']['item_id']}
+                    elif result['code'] == 'ApiCallLimit':
+                        time.sleep(3)
+                    elif result['code'] == '500':
+                        return {'upload_site': self.upload_site, 'upload_code': -1, 'product_id': self.product_id, 'data': '商品上传出现状态码500错误'}
+                    elif result['code'] == 'IllegalAccessToken':
+                        return {'upload_site': self.upload_site, 'upload_code': -2, 'product_id': self.product_id, 'data': 'accesstoken错误'}
+                    elif result['code'] == '4221':
+                        return {'upload_site': self.upload_site, 'upload_code': -3, 'product_id': self.product_id, 'data': '平台限制产品上传(可能违规)'}
+                    elif result['code'] == '5':
+                        return {'upload_site': self.upload_site, 'upload_code': -4, 'product_id': self.product_id, 'data': '数据包错误(异常请求)'}
+                    else:
+                        return {'upload_site': self.upload_site, 'upload_code': -5, 'product_id': self.product_id, 'data': '上传未知异常'}
+            else:
+                return {'upload_site': self.upload_site, 'upload_code': -6, 'product_id': self.product_id,
+                        'data': '商品主图出现304异常'}
+        return {'upload_site': self.upload_site, 'upload_code': -7, 'product_id': self.product_id, 'data': self.category_attributes['data']}
 
     def get_product_item(self):
         """

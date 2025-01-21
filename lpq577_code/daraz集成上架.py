@@ -81,7 +81,7 @@ def record_product_status(upload_info):
         product_id = upload_info.get('product_id')
         upload_site = upload_info.get('upload_site')
         upload_code = upload_info.get('upload_code')
-        data = upload_info.get('data')
+        data = upload_info.get('data') if 'message' not in upload_info.get('data')[0] else '上架包数据异常'
         item_id = upload_info.get('item_id', None)  # 如果 item_id 不存在，使用 None
 
         # 获取当前时间，格式化为字符串（YYYY-MM-DD HH:MM:SS）
@@ -109,11 +109,24 @@ def record_product_status(upload_info):
 
     except Exception as e:
         # 如果发生异常，记录错误日志并回滚事务
-        logging.warning('更新商品状态异常, product_id: %s, error: %s', product_id, str(e))
+        logging.warning('记录商品上传信息异常, product_id: %s, error: %s', product_id, str(e))
         cnx.rollback()  # 回滚事务，避免无效或部分更新的数据
 
     finally:
         # 关闭数据库连接和游标
+        mysql_pool.close_mysql(cnx, cursor)
+
+# 记录1688异常产品
+def record_1688_error(product_id, mark):
+    cnx, cursor = mysql_pool.get_conn()
+    try:
+        cursor.execute(
+            "INSERT INTO 1688_error (product_id, mark) VALUES (%s, %s)", (product_id, mark))
+        cnx.commit()
+    except Exception as e:
+        logging.warning('记录1688异常ID错误, product_id: %s, error: %s', product_id, str(e))
+        cnx.rollback()
+    finally:
         mysql_pool.close_mysql(cnx, cursor)
 
 def get_available_id_count():
@@ -172,8 +185,13 @@ def process_product(value, product_data, stop_event):
     product_id = product_data[2]
     # 使用 Alibaba 类来处理商品数据
     logging.info(f'{product_id}-获取成功-开始请求数据包')
-    product_object = Alibaba(product_id)
-    product_package = product_object.build_product_package()
+    try:
+        product_object = Alibaba(product_id)
+        product_package = product_object.build_product_package()
+    except Exception as e:
+        logging.warning(f"1688商品ID异常: {product_id}-{e}")
+        record_1688_error(product_id, '0')
+        return
 
     # 如果数据包构建失败，更新商品状态并返回
     if not product_package['status']:
@@ -188,12 +206,8 @@ def process_product(value, product_data, stop_event):
     data_packet_translate = text_translator.process_all()
 
     if data_packet_translate:
-        # 处理主图数据
-        main_images = [x['fullPathImageURI'] for x in data_packet_translate['main_images']]
-
-        # 限制主图数量不超过8张
-        if len(main_images) > 8:
-            main_images = main_images[:8]
+        # 主图
+        main_images = data_packet_translate['main_images']
 
         # 判断是否需要进行主图翻译
         if is_img_translate == '0':
@@ -204,13 +218,19 @@ def process_product(value, product_data, stop_event):
             if image_frist:
                 main_images[0] = image_frist
             else:
-                main_images = img_translate.xiangji_image_translate(main_images, 1, product_id)
+                images_data = img_translate.xiangji_image_translate(main_images, 1, product_id)
 
             # 如果象寄翻译返回为空，停止后续线程任务
-            if not main_images:
+            if images_data['status_code'] == 1:
                 logging.warning(f'{product_id}-象寄翻译返回为空, 停止继续启动新的线程')
                 stop_event.set()    # 设置停止事件，通知其他线程停止
                 return
+            elif images_data['status_code'] == 2:
+                logging.warning(f'{product_id}-主图出现304异常，跳过')
+                update_product_status(product_id)
+                return
+            else:
+                main_images = images_data['images']
 
         # 获取商品重量，并准备上货数据包
         unit_weight = data_packet_translate['unit_weight']
@@ -242,7 +262,7 @@ def process_product(value, product_data, stop_event):
 
         # 循环遍历要上传的站点数据
         for i in value:
-            logging.info(f'{product_id}-开始进行{i[1]}上货处理')
+            logging.info(f'{product_id}-{i[1]}-开始进行上货处理')
             upload_site = i[1].lower()
             skumodel_new = copy.deepcopy(data_packet_translate['skumodel'])
 
@@ -251,24 +271,25 @@ def process_product(value, product_data, stop_event):
                 attrs['skumodel'] = skumodel_new  # 更新数据包中的价格信息
 
                 # 创建上货请求并上传商品
-                daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
-                upload_results = daraz_product.create_product()
-
+                try:
+                    daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
+                    upload_results = daraz_product.create_product()
+                except Exception as e:
+                    logging.warning(f'{product_id}-{i[1]}上传异常-{e}')
+                    record_1688_error(product_id, '1')
+                    return
                 # 收集上传结果
                 new_dict = {'platform': product_data[0], 'email': i[2]}
                 new_dict.update(upload_results)
                 record_product_status(new_dict)
                 upload_results_list.append(new_dict)
-
-                # 更新商品状态
-                update_product_status(product_id)
             else:
-                # 如果价格不符合要求，更新商品状态并记录错误
-                product_id = data_packet_translate['product_id']
-                update_product_status(product_id)
-                new_dict = {'platform': product_data[0],  'email': i[2], 'upload_site': i[1], 'upload_code': -3, 'product_id': product_id, 'data': '数据包价格不符合要求'}
+                logging.warning(f'{product_id}-{i[1]}-数据包价格不符合要求')
+                new_dict = {'platform': product_data[0],  'email': i[2], 'upload_site': i[1], 'upload_code': -8, 'product_id': product_id, 'data': '数据包价格不符合要求'}
                 upload_results_list.append(new_dict)
                 record_product_status(new_dict)
+        # 更新商品状态
+        update_product_status(product_id)
         logging.info(upload_results_list)  # 输出上传结果
     else:
         logging.info(f'{product_id}-文字翻译异常')  # 如果文字翻译异常，记录日志
@@ -284,8 +305,8 @@ logging_config.setup_logger()
 
 # 主程序
 if __name__ == '__main__':
-    account = input('请输入你的account:')
-    is_img_translate = input('请输入主图翻译选项(0:不开启主图翻译; 1:开启主图翻译):')
+    account = input('请输入你的account: ')
+    is_img_translate = input('请输入主图翻译选项(0:不开启主图翻译; 1:开启主图翻译): ')
     # 获取对应account的deepl_api
     deepl_api = get_deepl_api()
     if not deepl_api:
@@ -307,19 +328,19 @@ if __name__ == '__main__':
         time.sleep(5)
         sys.exit()
 
-    max_workers = min(10, len(access_token_data))  # 最大线程数
+    max_workers = min(1, len(access_token_data))  # 最大线程数
     logging.info(f'当前工作线程数量：{max_workers}')
 
-    # 创建 XiangJi 实例
-    img_translate = XiangJi(account, mysql_pool)
-    xiangji_count = img_translate.get_xiangji_key_count()
-
-    if xiangji_count > 0:
-        logging.info(f'当前象寄密匙数量: {xiangji_count}')
-    else:
-        logging.info(f'当前象寄密匙数量: {xiangji_count}, 终止启动')
-        time.sleep(5)
-        sys.exit()
+    if is_img_translate == 1:
+        # 创建 XiangJi 实例
+        img_translate = XiangJi(account, mysql_pool)
+        xiangji_count = img_translate.get_xiangji_key_count()
+        if xiangji_count > 0:
+            logging.info(f'当前象寄密匙数量: {xiangji_count}')
+        else:
+            logging.info(f'当前象寄密匙数量: {xiangji_count}, 终止启动')
+            time.sleep(5)
+            sys.exit()
 
     access_token_cycle = cycle(access_token_data.values())  # 创建access_token的无限迭代器
     stop_event = Event()  # 假设的停止事件

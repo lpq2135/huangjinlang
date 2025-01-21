@@ -25,7 +25,7 @@ def setup_logger():
     # 文件日志
     current_date = datetime.now().strftime("%Y-%m-%d")
     log_file = os.path.join(log_folder, f'my_log_{current_date}.log')  # 使用当前日期作为文件名
-    file_handler = RotatingFileHandler(log_file, maxBytes=100 * 1024 * 1024,
+    file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024,
                                        backupCount=10)  # 设置每个日志文件大小为10MB，保留最近10个日志文件
     file_handler.setFormatter(logging.Formatter(log_format))
 
