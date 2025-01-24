@@ -5,20 +5,13 @@ import re
 import time
 
 
-def request_function(url, method='GET', headers=None, data=None, proxies=None, retries=5, timeout=30):
-    """
-    发送HTTP请求，支持GET和POST方法，支持重试机制。
+proxies = {
+    'http': 'http://brd-customer-hl_8240a7b6-zone-ruten_remove:g4w5c685daes@brd.superproxy.io:33335',
+    'https': 'https://brd-customer-hl_8240a7b6-zone-ruten_remove:g4w5c685daes@brd.superproxy.io:33335',
+}
 
-    :param url: 请求的URL
-    :param method: 请求的方法，'GET' 或 'POST' (默认为 'GET')
-    :param headers: 请求的头信息（可选）
-    :param data: POST请求时提交的数据（可选）
-    :param params: GET请求时的查询参数（可选）
-    :param retries: 请求失败后的重试次数（默认为3次）
-    :param timeout: 请求的超时时间，格式为 (连接超时, 读取超时)（默认为(30, 120)）
-    :return: 返回响应对象，如果请求失败，则返回None
-    """
-    for attempt in range(retries):
+def request_function(url, method='GET', headers=None, data=None, proxies=None, timeout=30):
+    for attempt in range(5):
         try:
             if method.upper() == 'POST':
                 response = requests.post(url, headers=headers, data=data, timeout=timeout, proxies=proxies)
@@ -40,7 +33,7 @@ def request_function(url, method='GET', headers=None, data=None, proxies=None, r
 def get_product_package(product_id):
     headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
     url = f'https://www.ruten.com.tw/item/show?{product_id}'
-    response = request_function(url, method='GET', headers=headers)
+    response = request_function(url, method='GET', headers=headers,proxies=proxies)
     match = re.search(r'(?<=RT\.context\ =\ ).*(?=;)', response.text)
     if match:
         return match.group(0)
