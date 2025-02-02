@@ -79,5 +79,17 @@ def handling_verification_codes():
     result = 图鉴打码.base64_api(uname=uname, pwd=pwd, img=img_path, typeid=typeid)
     return result
 
+@app.route('/get_product_by_jumia', methods=['post'])
+def get_product_by_jumia():
+    url = request.values.get('url').strip()
+    proxy = request.values.get('proxy').strip()
+    proxies = {
+        'http': f'http://{proxy}',
+        'https': f'https://{proxy}',
+    }
+    headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
+    result = requests.get(url, headers, proxies=proxies)
+    return {'code': result.status_code, 'data': result.text}
+
 
 app.run(host='0.0.0.0', port=8803, debug=False)
