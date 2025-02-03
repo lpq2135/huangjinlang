@@ -45,37 +45,37 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ASKED_ADD_EXTERNAL_FILES": "true",
-    "Python.D小秘.executor": "Run",
-    "Python.Load_Demo.executor": "Run",
-    "Python.daraz_api.executor": "Debug",
-    "Python.daraz集成上架.executor": "Run",
-    "Python.login.executor": "Run",
-    "Python.mylogin.executor": "Run",
-    "Python.ruten循环上下架.executor": "Run",
-    "Python.test.executor": "Run",
-    "Python.图鉴打码.executor": "Run",
-    "Python.数据库连接.executor": "Run",
-    "Python.文字翻译.executor": "Run",
-    "Python.电商平台数据组装api.executor": "Run",
-    "Python.登录界面.executor": "Run",
-    "Python.象寄翻译.executor": "Debug",
-    "Python.黄金浪电商管理系统 (1).executor": "Run",
-    "Python.黄金浪相关接口.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "C:/Users/Administrator/PycharmProjects/pythonProject/huangjinlang/.venv/Lib/site-packages/qt6_applications/Qt/bin/designer.exe",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
+    &quot;Python.D小秘.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Load_Demo.executor&quot;: &quot;Run&quot;,
+    &quot;Python.daraz_api.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.daraz集成上架.executor&quot;: &quot;Run&quot;,
+    &quot;Python.login.executor&quot;: &quot;Run&quot;,
+    &quot;Python.mylogin.executor&quot;: &quot;Run&quot;,
+    &quot;Python.ruten循环上下架.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.图鉴打码.executor&quot;: &quot;Run&quot;,
+    &quot;Python.数据库连接.executor&quot;: &quot;Run&quot;,
+    &quot;Python.文字翻译.executor&quot;: &quot;Run&quot;,
+    &quot;Python.电商平台数据组装api.executor&quot;: &quot;Run&quot;,
+    &quot;Python.登录界面.executor&quot;: &quot;Run&quot;,
+    &quot;Python.象寄翻译.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.黄金浪电商管理系统 (1).executor&quot;: &quot;Run&quot;,
+    &quot;Python.黄金浪相关接口.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Administrator/PycharmProjects/pythonProject/huangjinlang/.venv/Lib/site-packages/qt6_applications/Qt/bin/designer.exe&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;project.propVCSSupport.DirectoryMappings&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\Administrator\PycharmProjects\pythonProject\huangjinlang\lpq577_code\应用程序文件\测试文件" />
@@ -350,7 +350,7 @@
     <SUITE FILE_PATH="coverage/huangjinlang$.coverage" NAME="黄金浪相关接口 覆盖结果" MODIFIED="1737445810939" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
     <SUITE FILE_PATH="coverage/huangjinlang$api.coverage" NAME="电商平台数据组装api 覆盖结果" MODIFIED="1737016667766" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
     <SUITE FILE_PATH="coverage/huangjinlang$daraz_api.coverage" NAME="daraz_api 覆盖结果" MODIFIED="1736692978646" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
-    <SUITE FILE_PATH="coverage/huangjinlang$ruten.coverage" NAME="ruten循环上下架 覆盖结果" MODIFIED="1737533173364" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
+    <SUITE FILE_PATH="coverage/huangjinlang$ruten.coverage" NAME="ruten循环上下架 覆盖结果" MODIFIED="1738567109581" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
     <SUITE FILE_PATH="coverage/huangjinlang$D.coverage" NAME="D小秘 覆盖结果" MODIFIED="1735893402249" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
     <SUITE FILE_PATH="coverage/huangjinlang$mylogin.coverage" NAME="mylogin 覆盖结果" MODIFIED="1735804080836" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$USER_HOME$/Desktop/应用程序开发/相关源码/用户登陆" />
     <SUITE FILE_PATH="coverage/huangjinlang$Load_Demo.coverage" NAME="Load_Demo 覆盖结果" MODIFIED="1735804783470" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$USER_HOME$/AppData/Local/Temp/2e160c42-bc1e-47c1-9abd-b8c19ef46a46_登陆界面设计.zip.a46/登陆界面设计" />

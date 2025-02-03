@@ -75,6 +75,7 @@ class Ruten:
         return response.text
 
     def get_pagination_product_id(self, page):
+        # 获取分页的商品ID
         url = f'https://mybid.ruten.com.tw/master/my.php?p={page}&l_type=sel_selling&p_size=30&o_sort=asc&o_column=post_time'
         response = request_function(url, headers=self.headers)
         tree = html.fromstring(response)
@@ -120,8 +121,20 @@ class Ruten:
         # 处理详情
         pass
 
+    def upload_products(self):
+        # 上货参数注释
+        # shop_id: 类目ID
+        # process_img: 主图数据包
+        # g_name: 标题
+        # g_mode: 未知
+        # user_class_select: 后台自定分类编号
+        # spec_info: sku规格数据包
+        # spec_info: sku规格数据包
+
+        pass
+
 
 if __name__ == '__main__':
     reten = Ruten('urxfntnl')
-    result = reten.upload_main_images()
+    result = reten.get_product_package('22437647633197')
     print(result)
