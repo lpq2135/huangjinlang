@@ -42,38 +42,38 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ASKED_ADD_EXTERNAL_FILES": "true",
-    "Python.D小秘.executor": "Run",
-    "Python.Load_Demo.executor": "Run",
-    "Python.daraz_api.executor": "Run",
-    "Python.daraz集成上架.executor": "Run",
-    "Python.login.executor": "Run",
-    "Python.mylogin.executor": "Run",
-    "Python.ruten循环上下架.executor": "Debug",
-    "Python.test.executor": "Run",
-    "Python.图鉴打码.executor": "Run",
-    "Python.数据库连接.executor": "Run",
-    "Python.文字翻译.executor": "Run",
-    "Python.测试.executor": "Run",
-    "Python.电商平台数据组装api.executor": "Run",
-    "Python.登录界面.executor": "Run",
-    "Python.象寄翻译.executor": "Debug",
-    "Python.黄金浪电商管理系统 (1).executor": "Run",
-    "Python.黄金浪相关接口.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "C:/Users/Administrator/PycharmProjects/pythonProject/huangjinlang/.venv/Lib/site-packages/qt6_applications/Qt/bin/designer.exe",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
+    &quot;Python.D小秘.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Load_Demo.executor&quot;: &quot;Run&quot;,
+    &quot;Python.daraz_api.executor&quot;: &quot;Run&quot;,
+    &quot;Python.daraz集成上架.executor&quot;: &quot;Run&quot;,
+    &quot;Python.login.executor&quot;: &quot;Run&quot;,
+    &quot;Python.mylogin.executor&quot;: &quot;Run&quot;,
+    &quot;Python.ruten循环上下架.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;Python.图鉴打码.executor&quot;: &quot;Run&quot;,
+    &quot;Python.数据库连接.executor&quot;: &quot;Run&quot;,
+    &quot;Python.文字翻译.executor&quot;: &quot;Run&quot;,
+    &quot;Python.测试.executor&quot;: &quot;Run&quot;,
+    &quot;Python.电商平台数据组装api.executor&quot;: &quot;Run&quot;,
+    &quot;Python.登录界面.executor&quot;: &quot;Run&quot;,
+    &quot;Python.象寄翻译.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.黄金浪电商管理系统 (1).executor&quot;: &quot;Run&quot;,
+    &quot;Python.黄金浪相关接口.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Administrator/PycharmProjects/pythonProject/huangjinlang/.venv/Lib/site-packages/qt6_applications/Qt/bin/designer.exe&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\Administrator\PycharmProjects\pythonProject\huangjinlang\lpq577_code\应用程序文件\测试文件" />
@@ -352,7 +352,6 @@
     <recent_temporary>
       <list>
         <item itemvalue="Python.ruten循环上下架" />
-        <item itemvalue="Python.测试" />
         <item itemvalue="Python.daraz集成上架" />
         <item itemvalue="Python.电商平台数据组装api" />
         <item itemvalue="Python.黄金浪相关接口" />
