@@ -47,7 +47,7 @@ def translate_text_with_deepl():
     }
     for _ in range(5):
         try:
-            response = requests.post(deepl_url, data=data).json()
+            response = requests.post(deepl_url, data=data)
             if 'text' in response["translations"][0]:
                 result = response["translations"][0]["text"]
                 return result

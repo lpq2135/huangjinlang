@@ -4,6 +4,11 @@ import logging
 import re
 import time
 import io
+import json
+import random
+
+from datetime import datetime
+from lxml import html
 
 
 def request_function(url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30):
@@ -21,6 +26,52 @@ def request_function(url, method='GET', headers=None, data=None, proxies=None, f
             logging.warning(f"请求错误 ({method}-{url}): {e}. 重试中... ({attempt + 1}/5)")
             time.sleep(2)
 
+def generate_random_number(length):
+    # 第一个数字为 1-9，后续数字为 0-9
+    first_digit = random.randint(1, 9)  # 生成第一位数字 (1-9)
+    remaining_digits = ''.join(str(random.randint(0, 9)) for _ in range(length - 1))  # 生成剩余的数字 (0-9)
+    return str(first_digit) + remaining_digits
+
+def get_all_keys(d):
+    # 获取所有的键
+    keys = []
+    if isinstance(d, dict):  # 如果是字典
+        for key, value in d.items():
+            keys.append(key)  # 添加键
+            if isinstance(value, dict):  # 如果值还是字典，递归调用
+                for key1 in value.keys():
+                    keys.append(key1)
+    return keys
+
+def replace_key_value(structure_list, d):
+    # 创建一个结构字典，存储结构列表与随机键的映射
+    structure_dict = {i: 'temp_' + generate_random_number(8) for i in structure_list}
+    specs_new_dict = {}
+    structure_new_dict = {}
+    # 替换specs中的键
+    for key, value in d['specs'].items():
+        new_key = structure_dict[key]  # 获取新的键
+        # 替换specs字典中的键
+        specs_new_dict[new_key] = value.copy()
+        # 替换spec_id
+        specs_new_dict[new_key]['spec_id'] = new_key
+        # 替换childs中的键（如果有childs并且是字典）
+        if isinstance(specs_new_dict[new_key]['childs'], dict):
+            for child_key in list(specs_new_dict[new_key]['childs'].keys()):
+                new_child_key = structure_dict[child_key]
+                # 替换childs中的键
+                specs_new_dict[new_key]['childs'][new_child_key] = specs_new_dict[new_key]['childs'].pop(child_key)
+    for key, value in d['structure'].items():
+        new_key = structure_dict[key]
+        # 替换structure字典中的键
+        structure_new_dict[new_key] = value.copy()
+        # 替换childs中的键（如果有childs并且是字典）
+        if isinstance(structure_new_dict[new_key], dict):
+            for structure_key in list(structure_new_dict[new_key].keys()):
+                new_structure_key = structure_dict[structure_key]
+                structure_new_dict[new_key][new_structure_key] = structure_new_dict[new_key].pop(structure_key)
+
+    return specs_new_dict, structure_new_dict
 
 class Ruten:
     def __init__(self, store):
@@ -33,6 +84,7 @@ class Ruten:
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'cookie': self.get_cookie_by_api()}
         self.ck = self.get_upload_ck_value()
+        self.current_month = datetime.now().strftime("%Y%m")
 
     def get_product_package(self, product_id):
         # 获取商品数据包
@@ -42,8 +94,8 @@ class Ruten:
         if match:
             return match.group(0)
         else:
-            print("No match found")
-            return match
+            print(f'获取商品数据包失败-{product_id}')
+            return None
 
     def get_cookie_by_api(self):
         # 通过本地接口获取cookie
@@ -65,12 +117,11 @@ class Ruten:
         response = request_function(url, headers=self.headers)
         return response.url.split('ck=')[1]
 
-    def upload_main_images(self):
+    def upload_main_images(self, img_url):
         # 上传主图
         url = f'https://upload.ruten.com.tw/item/image.php?ck={self.ck}'
-        image_path = 'https://a.rimg.com.tw/c1/7f7/4f0/dfhgfghngf/6/3a/22422669590074_161.jpg'
-        image_result = request_function(image_path, headers=self.headers)
-        files = {'image': (image_path.split('/')[-1], io.BytesIO(image_result.content), 'image/jpeg')}
+        image_result = request_function(img_url, headers=self.headers)
+        files = {'image': (img_url.split('/')[-1], io.BytesIO(image_result.content), 'image/jpeg')}
         response = request_function(url, method='POST', headers=self.headers, files=files)
         return response.text
 
@@ -78,9 +129,9 @@ class Ruten:
         # 获取分页的商品ID
         url = f'https://mybid.ruten.com.tw/master/my.php?p={page}&l_type=sel_selling&p_size=30&o_sort=asc&o_column=post_time'
         response = request_function(url, headers=self.headers)
-        tree = html.fromstring(response)
-        product_num = re.findall(r'"real_total":(.*?)}', response)[0]
-        if product_num is not None:
+        tree = html.fromstring(response.text)
+        product_num = re.findall(r'"real_total":(.*?)}', response.text)[0]
+        if product_num:
             id_list = tree.xpath('//tr[@class="row-odd" or @class="row-even"]/@data-gno')
             new_list = []
             for i in id_list:
@@ -95,13 +146,32 @@ class Ruten:
                     'upduct_time': tree.xpath(f'//tr[@data-gno="{i}"]/td[10]/text()')[0].strip(),
                 }
                 new_list.append(product_data)
-            return product_num, new_list
+            return new_list
+
+    def get_description(self, description_url):
+        response = request_function(description_url, headers=self.headers)
+        return response.text
+
+    def process_upload_data(self, product_id):
+        # 处理上货数据
+        product_data = json.loads(self.get_product_package(product_id))
+        upload_data = {
+            'name': product_data['item']['name'],
+            'mode': product_data['item']['mode'],
+            'main_images': [i['original'] for i in product_data['item']['images']],
+            'category_id': product_data['item']['class'],
+            'direct_price': product_data['item']['directPrice'],
+            'remain_num': product_data['item']['remainNum'],
+            'spec_info': product_data['item']['specInfo'],
+            'descriptionUrl': '111'
+        }
+        return upload_data
 
     def process_category_id(self):
         # 处理类目编号
         pass
 
-    def process_img(self):
+    def process_main_img(self):
         # 处理主图
         pass
 
@@ -113,28 +183,82 @@ class Ruten:
         # 处理后台分类
         pass
 
-    def process_sku(self):
-        # 处理sku规格
-        pass
+    def process_item_detail(self, spec_info):
+        # 处理 item_detail
+        num = 0
+        item_detail_dict = {'new_spec_name': None}
+        for key, value in spec_info.items():
+            item_detail_dict[f'item_detail_price_{num}'] = value['spec_price']
+            item_detail_dict[f'item_detail_count_{num}'] = value['spec_num']
+            num += 1
+        return item_detail_dict
 
     def process_details(self):
         # 处理详情
         pass
 
-    def upload_products(self):
-        # 上货参数注释
-        # shop_id: 类目ID
-        # process_img: 主图数据包
-        # g_name: 标题
-        # g_mode: 未知
-        # user_class_select: 后台自定分类编号
-        # spec_info: sku规格数据包
-        # spec_info: sku规格数据包
+    def upload_products(self, product_id):
+        # 获取处理好的商品数据
+        upload_data = self.process_upload_data(product_id)
 
-        pass
+        # 处理sku参数-单规格或双规格
+        if upload_data['spec_info']:
+            structure_list = get_all_keys(upload_data['spec_info']['structure'])
+            specs_dict, structure_dict = replace_key_value(structure_list, upload_data['spec_info'])
+            upload_data['spec_info']['specs'] = specs_dict  # 替换原始 specs 数据
+            upload_data['spec_info']['structure'] = structure_dict  # 替换原始 structure_dict 数据
+            item_detail_dict = self.process_item_detail(specs_dict)
+        else:
+            # 无规格 item_detail 参数
+            item_detail_dict = {
+                'new_spec_name': None,
+                'item_detail_price_0': upload_data['direct_price'],
+                'item_detail_count_0': upload_data['remain_num'],
+                'item_detail_note_0': None,
+            }
+
+        # 开始处理图片上传并组装格式
+        main_images = []
+        for i in upload_data['main_images']:
+            result = json.loads(self.upload_main_images(i))
+            image = {"img_name": result['content']['file_name'], "storage": result['content']['storage']}
+            main_images.append(image)
+
+        data_dict = {
+            'shop_id': upload_data['category_id'],    # 类目id
+            'process_img': main_images,    # 主图数据包
+            'g_name': upload_data['name'],    # 标题
+            'user_class_select': None,    # 后台自自定义分类编码
+            'g_mode': 'B',    #
+            'g_direct_price': upload_data['direct_price'],
+            'spec_info': upload_data['spec_info'],    # sku数据包
+            'show_num': upload_data['remain_num'],    # 总库存数量
+            'is_goods_sale': '0',    # 銷售時間設定 0: 立即销售  1: 指定销售时间
+            'sale_start_time': None,    # 銷售時間設定-开始时间(如果is_goods_sale=1,此参数必填)
+            'sale_end_time': None,    # 銷售時間設定-结束时间，不填则表示无限
+            'g_condition': 'B',    # 物品新旧 B: 全新
+            'stock_status': '1',    # 备货状态 3: 24h内出货  1: 3天内出货  4: 7天内出货  0: 21天内出货  6: 较长备货  2: 预售商品
+            'customized_ship_date': None,    # 较长备货的天数 22-90天
+            'pre_order_ship_date': self.current_month,    # 预计出货时间
+            'text2': '0002004',    # 详情
+            'g_flag': None,    # 特别醒目标签
+            'g_location': '台北市',    # 物品所在地
+            'g_buyer_limit_value': None,    # 买家下标限制-评价总分
+            'g_buyer_limit_nega': None,    # 买家下标限制-差劲评分
+            'g_buyer_limit_abandon': None,    # 买家下标限制-近半年弃单次数
+            'g_ship': 'B',    # 运费规定 A: 买家自付  B: 免运费
+            'g_pay_way': 'PAYLINK,SELF_FAMI_COD,SELF_SEVEN_COD,SELF_HILIFE_COD',    # 付款方式
+            'g_deliver_way': '{SELF_FAMI_COD:0,SELF_SEVEN_COD:0,SELF_HILIFE_COD:0,HOUSE:0,FAMI:0,SEVEN:0,HILIFE:0}',    # 运输方式
+        }
+
+        data_dict.update(item_detail_dict)
+
+        upload_url = f'https://mybidu.ruten.com.tw/upload/item_action.php?ck={self.ck}'
+        response = request_function(upload_url, 'POST', headers=self.headers, data=data_dict)
+        return response
 
 
 if __name__ == '__main__':
-    reten = Ruten('urxfntnl')
-    result = reten.get_product_package('22437647633197')
+    reten = Ruten('martha32')
+    result = reten.upload_products('22442980164912')
     print(result)
