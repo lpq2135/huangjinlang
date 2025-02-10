@@ -12,6 +12,7 @@ import daraz_api
 import logging_config
 import datetime
 
+from collections import defaultdict
 from 数据库连接 import MySqlPool
 from 文字翻译 import Translator
 from 电商平台数据组装api import Alibaba
@@ -167,13 +168,12 @@ def get_deepl_api():
 
 # 处理数据库中获取的多行数据，返回以 user_id 为键的字典
 def access_token_deal_with(rows):
-    my_dict = {}
+    my_dict = defaultdict(list)
     for row in rows:
-        if row[2] not in my_dict:
-            my_dict[row[2]] = [[row[0], row[1], row[3]]]
-        else:
-            my_dict[row[2]].append([row[0], row[1], row[3]])
-    return my_dict
+        if row[1] == 'bd':
+            continue
+        my_dict[row[2]].append([row[0], row[1], row[3]])
+    return dict(my_dict)
 
 
 # 处理每个商品的具体任务
@@ -198,6 +198,23 @@ def process_product(value, product_data, stop_event):
         logging.warning(f'{product_id}-{product_package["data"]}')
         update_product_status(product_id)
         return
+
+    # 获取商品重量，并准备上货数据包
+    unit_weight = product_package['data']['unit_weight']
+    mysql_weight = float(product_data[7])
+    if unit_weight is None:
+        weight = mysql_weight
+    else:
+        weight = min(float(unit_weight), mysql_weight)
+
+    if len(value) == 1 and value[0][1] == 'pk':
+        skumodel_temporary = copy.deepcopy(product_package['data']['skumodel'])
+        pk_processing_price = daraz_api.processing_price('pk', skumodel_temporary, weight)
+        # 判断数据包价格是否符合要求
+        if pk_processing_price is False:
+            logging.warning(f'{product_id}-{value[0][1]}-数据包价格不符合要求')
+            update_product_status(product_id)
+            return
 
     logging.info(f'{product_id}-开始文字翻译数据包')
 
@@ -231,14 +248,6 @@ def process_product(value, product_data, stop_event):
                 return
             else:
                 main_images = images_data['images']
-
-        # 获取商品重量，并准备上货数据包
-        unit_weight = data_packet_translate['unit_weight']
-        mysql_weight = float(product_data[7])
-        if unit_weight is None:
-            weight = mysql_weight
-        else:
-            weight = min(float(unit_weight), mysql_weight)
 
         attrs = {
             'primary_category': product_data[3],

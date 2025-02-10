@@ -26,6 +26,9 @@ class Alibaba:
                 if response.status_code == 404:
                     return response
 
+                if response.status_code == 400:
+                    return response
+
                 # 检查其他状态码的合法性
                 response.raise_for_status()
                 return response
@@ -124,8 +127,10 @@ class Alibaba:
             soup = BeautifulSoup(self.request_function(url=data['detailUrl']).text, 'html.parser')
             for img in soup.find_all('img'):
                 if 'src' in img.attrs:
-                    src = img['src'].replace("\\\"", "").strip('/').split('?')[0]
-                    if 'data:image' in src or 'chrome-extension' in src or 'file' in src or src == '' or 'cbu1' in src or not any(ext in src for ext in ['.jpg', '.jpeg', '.png']):
+                    src = img['src'].strip('\\"').split('?')[0]
+                    if 'https://' not in src:
+                        src = 'https:' + src
+                    if 'data:image' in src or 'taobaocdn' in src or '对象引用' in src or 'cbu0a' in src or 'http://' in src or 'chrome-extension' in src or 'file' in src or src == '' or 'cbu1' in src or not any(ext in src for ext in ['.jpg', '.jpeg']):
                         continue
                     response = self.request_function(src, headers, True)
                     img = Image.open(BytesIO(response.content))
@@ -159,7 +164,7 @@ class Alibaba:
 
     def build_product_package(self):
         if self.source:
-            if self.get_start_amount() <= 5:
+            if self.get_start_amount() <= 10:
                 main_images = self.get_main_images()
                 if len(main_images) != 0:
                     skuProps = self.source['globalData']['skuModel'].get('skuProps', [])
@@ -187,6 +192,8 @@ class Alibaba:
                         }
                         sku_props = self.source['globalData']['skuModel']['skuProps']
                         sku_maps = self.source['globalData']['skuModel']['skuInfoMap']
+                        if sku_props[0]['value'] == [{}]:
+                            return {'status': False, 'specifications': None, 'data': '商品数据包异常'}
                         for i in sku_props[0]['value']:
                             sku_value = i['name']
                             imageUrl = i.get('imageUrl', None)
@@ -213,6 +220,8 @@ class Alibaba:
                         specifications = 2
                         sku1_property_name = self.source['globalData']['skuModel']['skuProps'][0]['prop'].replace(
                             '产品', '')
+                        if 'prop' not in self.source['globalData']['skuModel']['skuProps'][1]:
+                            return {'status': False, 'specifications': None, 'data': '商品数据包异常'}
                         sku2_property_name = self.source['globalData']['skuModel']['skuProps'][1]['prop'].replace(
                             '产品', '')
                         sku_props = self.source['globalData']['skuModel']['skuProps']
@@ -274,7 +283,7 @@ class Alibaba:
 
 
 if __name__ == '__main__':
-    res = Alibaba('863212756596')
+    res = Alibaba('882023570207')
     try:
         res1 = res.build_product_package()
         print(res1)
