@@ -290,6 +290,4 @@ if __name__ == '__main__':
     reten = Ruten('martha32')
     result = reten.upload_products('22442980164912')
     print(result)
-
-s = 2
-
+    print("这是远程代码")  # 仅保留远程仓库的修改
