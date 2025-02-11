@@ -291,4 +291,5 @@ if __name__ == '__main__':
     result = reten.upload_products('22442980164912')
     print(result)
 
-s = 1
+s = 2
+
