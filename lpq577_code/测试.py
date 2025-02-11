@@ -120,3 +120,4 @@ response_finalize = requests.post(url_finalize, headers=headers)
 # response_finish = requests.get(response_finalize.url, headers=headers)
 
 print(response_finalize.text)  # 输出上架完成后的响应内容
+fdgfd
