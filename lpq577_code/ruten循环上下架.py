@@ -73,6 +73,23 @@ def replace_key_value(structure_list, d):
 
     return specs_new_dict, structure_new_dict
 
+
+def flatten_dict(d, parent_key='', sep='.'):
+    # 递归扁平化嵌套字典，将嵌套的字段使用 dot notation 连接，
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            # 如果是列表，将列表转换成字符串，表示空列表 "[]"
+            items.append((new_key, str(v) if v else '[]'))
+        else:
+            # 将值转换成字符串，None 转换为空字符串 ""
+            items.append((new_key, "" if v is None else str(v)))
+    return dict(items)
+
+
 class Ruten:
     def __init__(self, store):
         self.store = store
@@ -83,7 +100,7 @@ class Ruten:
         self.headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'cookie': self.get_cookie_by_api()}
-        self.ck = self.get_upload_ck_value()
+        self.ck = None
         self.current_month = datetime.now().strftime("%Y%m")
 
     def get_product_package(self, product_id):
@@ -110,12 +127,6 @@ class Ruten:
         except ValueError as e:
             logging.error(f"解析{self.store}参数数据失败: {e}")
             return None
-
-    def get_upload_ck_value(self):
-        # 获取上传所需ck值
-        url = 'https://mybidu.ruten.com.tw/upload/item_initial.php'
-        response = request_function(url, headers=self.headers)
-        return response.url.split('ck=')[1]
 
     def upload_main_images(self, img_url):
         # 上传主图
@@ -187,10 +198,13 @@ class Ruten:
         # 处理 item_detail
         num = 0
         item_detail_dict = {'new_spec_name': None}
+        # 处理 item_detail
         for key, value in spec_info.items():
             item_detail_dict[f'item_detail_price_{num}'] = value['spec_price']
             item_detail_dict[f'item_detail_count_{num}'] = value['spec_num']
             num += 1
+        # 处理扁平化 spec_info
+
         return item_detail_dict
 
     def process_details(self):
@@ -198,6 +212,13 @@ class Ruten:
         pass
 
     def upload_products(self, product_id):
+        # 上传产品总流程
+
+        # 获取上传所需ck值
+        url_initial = 'https://mybidu.ruten.com.tw/upload/item_initial.php'
+        response_initial = request_function(url_initial, headers=self.headers)
+        self.ck = response_initial.url.split('ck=')[1]
+
         # 获取处理好的商品数据
         upload_data = self.process_upload_data(product_id)
 
@@ -206,15 +227,17 @@ class Ruten:
             structure_list = get_all_keys(upload_data['spec_info']['structure'])
             specs_dict, structure_dict = replace_key_value(structure_list, upload_data['spec_info'])
             upload_data['spec_info']['specs'] = specs_dict  # 替换原始 specs 数据
-            upload_data['spec_info']['structure'] = structure_dict  # 替换原始 structure_dict 数据
+            upload_data['spec_info']['structure'] = structure_dict
+            flatten_spec_info = flatten_dict(upload_data['spec_info'])
             item_detail_dict = self.process_item_detail(specs_dict)
+            item_detail_dict.update(flatten_spec_info)
         else:
             # 无规格 item_detail 参数
             item_detail_dict = {
-                'new_spec_name': None,
+                'new_spec_name': '',
                 'item_detail_price_0': upload_data['direct_price'],
                 'item_detail_count_0': upload_data['remain_num'],
-                'item_detail_note_0': None,
+                'item_detail_note_0': '',
             }
 
         # 开始处理图片上传并组装格式
@@ -228,33 +251,38 @@ class Ruten:
             'shop_id': upload_data['category_id'],    # 类目id
             'process_img': main_images,    # 主图数据包
             'g_name': upload_data['name'],    # 标题
-            'user_class_select': None,    # 后台自自定义分类编码
-            'g_mode': 'B',    #
-            'g_direct_price': upload_data['direct_price'],
-            'spec_info': upload_data['spec_info'],    # sku数据包
+            'user_class_select': '',    # 后台自自定义分类编码
+            'g_mode': 'B',    # mode
+            'g_direct_price': upload_data['direct_price'],   # sku数据包
             'show_num': upload_data['remain_num'],    # 总库存数量
             'is_goods_sale': '0',    # 銷售時間設定 0: 立即销售  1: 指定销售时间
-            'sale_start_time': None,    # 銷售時間設定-开始时间(如果is_goods_sale=1,此参数必填)
-            'sale_end_time': None,    # 銷售時間設定-结束时间，不填则表示无限
+            'sale_start_time': '',    # 銷售時間設定-开始时间(如果is_goods_sale=1,此参数必填)
+            'sale_end_time': '',    # 銷售時間設定-结束时间，不填则表示无限
             'g_condition': 'B',    # 物品新旧 B: 全新
             'stock_status': '1',    # 备货状态 3: 24h内出货  1: 3天内出货  4: 7天内出货  0: 21天内出货  6: 较长备货  2: 预售商品
-            'customized_ship_date': None,    # 较长备货的天数 22-90天
+            'customized_ship_date': '',    # 较长备货的天数 22-90天
             'pre_order_ship_date': self.current_month,    # 预计出货时间
             'text2': '0002004',    # 详情
-            'g_flag': None,    # 特别醒目标签
+            'g_flag': '',    # 特别醒目标签
             'g_location': '台北市',    # 物品所在地
-            'g_buyer_limit_value': None,    # 买家下标限制-评价总分
-            'g_buyer_limit_nega': None,    # 买家下标限制-差劲评分
-            'g_buyer_limit_abandon': None,    # 买家下标限制-近半年弃单次数
+            'g_buyer_limit_value': '',    # 买家下标限制-评价总分
+            'g_buyer_limit_nega': '',    # 买家下标限制-差劲评分
+            'g_buyer_limit_abandon': '',    # 买家下标限制-近半年弃单次数
             'g_ship': 'B',    # 运费规定 A: 买家自付  B: 免运费
             'g_pay_way': 'PAYLINK,SELF_FAMI_COD,SELF_SEVEN_COD,SELF_HILIFE_COD',    # 付款方式
-            'g_deliver_way': '{SELF_FAMI_COD:0,SELF_SEVEN_COD:0,SELF_HILIFE_COD:0,HOUSE:0,FAMI:0,SEVEN:0,HILIFE:0}',    # 运输方式
+            'g_deliver_way': '{SELF_FAMI_COD:60,SELF_SEVEN_COD:60,SELF_HILIFE_COD:45,HOUSE:100,ISLAND:300,FAMI:60,SEVEN:60,HILIFE:45}',    # 运输方式
         }
 
         data_dict.update(item_detail_dict)
 
-        upload_url = f'https://mybidu.ruten.com.tw/upload/item_action.php?ck={self.ck}'
-        response = request_function(upload_url, 'POST', headers=self.headers, data=data_dict)
+        # 第一次请求进入预览页面
+        url_action = f'https://mybidu.ruten.com.tw/upload/item_action.php?ck={self.ck}'
+        response_action = request_function(url_action, 'POST', headers=self.headers, data=json.dumps(data_dict))
+
+        # 完成最终的上架请求
+        url_finalize = f"https://mybidu.ruten.com.tw/upload/item_finalize.php?ck={ck_value}"
+        response_finalize = request_function(url_finalize, headers=self.headers)
+
         return response
 
 
@@ -262,4 +290,3 @@ if __name__ == '__main__':
     reten = Ruten('martha32')
     result = reten.upload_products('22442980164912')
     print(result)
-#df
