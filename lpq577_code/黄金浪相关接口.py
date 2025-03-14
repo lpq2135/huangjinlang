@@ -9,6 +9,7 @@ import 图鉴打码
 from flask import Flask, request
 from logging_config import logging
 from 电商平台数据组装api import Alibaba
+from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -59,7 +60,7 @@ def translate_text_with_deepl():
 def auth_token_create():
     code = request.values.get('code')
     upload_site = request.values.get('upload_site')
-    product = daraz_api.DarazProduct('502742', '0XGyiUMf0obAP9FueDD16fid4M5xgmaV', upload_site=upload_site)
+    product = daraz_api.DarazProduct(upload_site=upload_site)
     store_information = product.generate_access_token(code)
     return store_information
 
@@ -90,6 +91,22 @@ def get_product_by_jumia():
     headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
     result = requests.get(url, headers, proxies=proxies)
     return {'code': result.status_code, 'data': result.text}
+
+@app.route('/deepseek_chat', methods=['post'])
+def deepseek_chat():
+    api_key = request.values.get('api_key').strip()
+    model = request.values.get('model').strip()
+    content = request.values.get('content').strip()
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": content},
+        ],
+        stream=False
+    )
+    return (response.choices[0].message.content)
 
 
 app.run(host='0.0.0.0', port=8803, debug=False)

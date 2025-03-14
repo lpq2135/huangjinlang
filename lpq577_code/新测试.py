@@ -1,26 +1,36 @@
-def flatten_dict(d, parent_key='', sep='.'):
-    """
-    递归扁平化嵌套字典，将嵌套的字段使用 dot notation 连接，
-    并将 None 转换为空字符串 ""。
-    """
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        elif isinstance(v, list):
-            # 如果是列表，将列表转换成字符串，表示空列表 "[]"
-            items.append((new_key, str(v) if v else '[]'))
-        else:
-            # 将值转换成字符串，None 转换为空字符串 ""
-            items.append((new_key, "" if v is None else str(v)))
-    return dict(items)
+# product_data = {
+#     'min_price': 349,
+#     'max_price': 1001,
+#     'click': 99,
+#     'cart': 99
+# }
+#
+# min_price = 350
+# max_price = 18000
+# maximum_views = 100
+# maximum_traces = 100
+#
+# if (int(product_data['min_price']) < min_price and int(product_data['max_price']) > 1000) or (
+#                         min_price <= int(product_data['min_price']) <= max_price):
+#     print(1)
+# else:
+#     print(2)
+#
+# if int(product_data['click']) <= maximum_views and int(product_data['cart']) <= maximum_traces:
+#     print(3)
+# else:
+#     print(4)
 
-# 你的原始数据
-spec_info = {"level":2,"structure":{"temp_15668958":{"temp_74158999":[]}},"specs":{"temp_15668958":{"spec_id":"temp_15668958","parent_id":"0","spec_name":"sku1","spec_num":"0","spec_status":"Y","spec_ext":{"goods_no":None},"childs":{"temp_74158999":[]}},"temp_74158999":{"spec_id":"temp_74158999","parent_id":"temp_15668958","spec_name":"sku2","spec_num":"199","spec_price":"199","spec_status":"Y","spec_ext":{"goods_no":None},"childs":[]}}}
 
-# 扁平化
-flat_spec_info = flatten_dict(spec_info)
-
-# 打印扁平化后的数据
-print(flat_spec_info)
+# title = '適用無線  m220 靜音滑鼠 辦公滑鼠 對稱滑鼠 帶無線微型接收'
+# while '  ' in title:
+#     title = title.replace('  ', ' ')
+#
+# print(title.count(' '))
+import requests
+url = 'https://rapi.ruten.com.tw/api/items/v2/list?gno=22511914927171&level=simple'
+headers = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+}
+result = requests.get(url, headers=headers).json()
+print(result['data'][0]['available'])

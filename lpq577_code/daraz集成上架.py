@@ -19,14 +19,14 @@ from 电商平台数据组装api import Alibaba
 from 象寄翻译 import XiangJi
 from itertools import cycle
 from threading import Event
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_completed, TimeoutError
 
 # 获取店铺的 access_token 和其他相关信息
 def get_access_token():
     cnx, cursor = mysql_pool.get_conn()
     try:
         cursor.execute(
-            "SELECT access_token, country, user_id, email FROM daraz_store_internal_parameters WHERE status = 0 AND account = %s",
+            "SELECT access_token, country, user_id, email FROM daraz_store_internal_parameters WHERE status = 0 AND application_category = 'erp' AND account = %s",
             (account,))
         rows = cursor.fetchall()
         if rows:
@@ -43,9 +43,9 @@ def get_access_token():
 def get_product_data():
     cnx, cursor = mysql_pool.get_conn()
     try:
-        cursor.execute(
-            "SELECT * FROM product_id_deduplication WHERE status = '0' AND account = %s ORDER BY RAND() LIMIT 200",
-            (account,))
+        table_name = f'product_id_deduplication_by_{account}'
+        query = f"SELECT * FROM {table_name} WHERE status = '0' ORDER BY RAND() LIMIT 500"
+        cursor.execute(query)
         rows = cursor.fetchall()
         return None if not rows else rows
     except Exception as e:
@@ -59,10 +59,9 @@ def get_product_data():
 def update_product_status(product_id):
     cnx, cursor = mysql_pool.get_conn()
     try:
-        cursor.execute(
-            "UPDATE product_id_deduplication SET status = '1' WHERE account = %s AND product_id = %s",
-            (account, product_id,)
-        )
+        table_name = f"product_id_deduplication_by_{account}"  # 构建完整的表名
+        query = f"UPDATE {table_name} SET status = '1' WHERE product_id = %s"
+        cursor.execute(query, (product_id,))
         cnx.commit()
     except Exception as e:
         logging.warning('更新商品状态异常, product_id: %s, error: %s', product_id, str(e))
@@ -136,7 +135,9 @@ def get_available_id_count():
     """
     cnx, cursor = mysql_pool.get_conn()
     try:
-        cursor.execute("SELECT COUNT(*) FROM product_id_deduplication WHERE account = %s AND status = '0'", (account,))
+        table_name = f'product_id_deduplication_by_{account}'
+        query = f"SELECT COUNT(*) FROM {table_name} WHERE status = '0'"
+        cursor.execute(query)
         row_count = cursor.fetchone()[0]
         if row_count is None:
             logging.warning('数据库无象寄翻译密匙')
@@ -207,9 +208,11 @@ def process_product(value, product_data, stop_event):
     else:
         weight = min(float(unit_weight), mysql_weight)
 
+    # 创建daraz价格类的实例
+    daraz_price = daraz_api.DarazPrice()
     if len(value) == 1 and value[0][1] == 'pk':
         skumodel_temporary = copy.deepcopy(product_package['data']['skumodel'])
-        pk_processing_price = daraz_api.processing_price('pk', skumodel_temporary, weight)
+        pk_processing_price = daraz_price.processing_price('pk', skumodel_temporary, weight)
         # 判断数据包价格是否符合要求
         if pk_processing_price is False:
             logging.warning(f'{product_id}-{value[0][1]}-数据包价格不符合要求')
@@ -276,12 +279,12 @@ def process_product(value, product_data, stop_event):
             skumodel_new = copy.deepcopy(data_packet_translate['skumodel'])
 
             # 处理价格
-            if daraz_api.processing_price(upload_site, skumodel_new, weight):
+            if daraz_price.processing_price(upload_site, skumodel_new, weight):
                 attrs['skumodel'] = skumodel_new  # 更新数据包中的价格信息
 
                 # 创建上货请求并上传商品
                 try:
-                    daraz_product = daraz_api.DarazProduct(app_key, app_secret, i[0], i[1], attrs)
+                    daraz_product = daraz_api.DarazProduct(i[0], i[1], attrs)
                     upload_results = daraz_product.create_product()
                 except Exception as e:
                     logging.warning(f'{product_id}-{i[1]}上传异常-{e}')
@@ -337,7 +340,7 @@ if __name__ == '__main__':
         time.sleep(5)
         sys.exit()
 
-    max_workers = min(1, len(access_token_data))  # 最大线程数
+    max_workers = min(20, len(access_token_data))  # 最大线程数
     logging.info(f'当前工作线程数量：{max_workers}')
 
     if is_img_translate == 1:
@@ -367,7 +370,14 @@ if __name__ == '__main__':
             task = main_pool.submit(process_product, access_token, product_data, stop_event)
             tasks.append(task)  # 将任务添加到列表
 
-        wait(tasks, return_when=ALL_COMPLETED)  # 等待所有任务执行完毕
+        # 逐个等待任务，并设置超时
+        for task in tasks:
+            try:
+                task.result(timeout=150)  # 每个任务最多等待 150 秒
+            except TimeoutError:
+                logging.error(f'任务超时，跳过该任务: {task}')
+            except Exception as e:
+                logging.error(f'任务发生异常: {e}')
 
         # 如果检测到停止事件被设置，终止整个循环
         if stop_event.is_set():
