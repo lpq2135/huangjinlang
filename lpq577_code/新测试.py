@@ -33,4 +33,5 @@ headers = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
 }
 result = requests.get(url, headers=headers).json()
-print(result['data'][0]['available'])
+if not result['data'][0]['available']:
+    print(1)

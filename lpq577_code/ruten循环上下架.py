@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 from threading import Lock
 from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_completed, TimeoutError
+from requests.exceptions import ReadTimeout, RequestException
 
 
 # code 状态注释
@@ -196,9 +197,6 @@ class Ruten:
 
         # 创建独立的 Session 对象
         self.session = requests.Session()
-        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
-        self.session.mount('https://', adapter)
-        self.session.mount('http://', adapter)
 
         cookie = self.get_cookie_by_api()
         if cookie is None:
@@ -226,6 +224,7 @@ class Ruten:
     # 创建通用请求函数
     def request_function(self, url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30):
         for attempt in range(8):
+            response = None  # 每次重试时初始化 response
             try:
                 # 使用实例的 session 发起请求
                 response = self.session.request(
@@ -240,11 +239,21 @@ class Ruten:
                 # 检查响应状态码
                 response.raise_for_status()  # 如果响应状态码不是 2xx，将抛出异常
                 return response
-            except requests.exceptions.RequestException as e:
-                if response.status_code == 404:
-                    return response
+            except ReadTimeout as e:
+                # 单独处理超时错误
+                logging.warning(f"请求超时 ({method}-{url}): {e}. 重试中... ({attempt + 1}/8)")
+                time.sleep(2 ** attempt)  # 指数退避策略
+            except RequestException as e:
+                # 处理其他请求异常
+                if hasattr(e, 'response') and e.response is not None:
+                    if e.response.status_code == 404:
+                        return e.response
                 logging.warning(f"请求错误 ({method}-{url}): {e}. 重试中... ({attempt + 1}/8)")
-                time.sleep(2)
+                time.sleep(2 ** attempt)
+            except Exception as e:
+                # 处理其他未知异常
+                logging.error(f"未知错误 ({method}-{url}): {e}")
+                return None
         logging.error(f"请求失败，已重试 8 次: {url}")
         return None
 
@@ -334,11 +343,11 @@ class Ruten:
     def upload_main_images(self, img_url, ck):
         url = f'https://upload.ruten.com.tw/item/image.php?ck={ck}'
         try:
-            image_result = self.request_function(img_url, headers=self.headers)
+            image_result = self.request_function(img_url, headers=self.headers, proxies=proxies)
             if image_result.status_code == 404:
                 return {'code': 3}
             files = {'image': (img_url.split('/')[-1], io.BytesIO(image_result.content), 'image/jpeg')}
-            response = self.request_function(url, method='post', headers=self.headers, files=files, proxies=self.proxies)
+            response = self.request_function(url, method='post', headers=self.headers, files=files, proxies=proxies)
             return {'code': 0, 'data': response.json()}
 
         except Exception as e:
@@ -600,6 +609,7 @@ class Ruten:
         data[f'g_name_{g_no}'] = title
         url1 = 'https://mybid.ruten.com.tw/master/action_sellnow_modify_deal.php'
         response1 = self.request_function(url1, 'post', headers=self.headers, data=data)
+        time.sleep(2)
         if 'filter_msg' in response1.url:
             logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架")
             return {'code': 4}
@@ -849,8 +859,9 @@ def process_store(row):
         with concurrent.futures.ThreadPoolExecutor(max_workers=store_workers) as executor:
             futures = []
             for product_data in product_id_lsit:
+                product_id = str(product_data['product_id'])
                 # 如果商品id在不可上架的id列表中，跳过
-                if product_data['product_id'] in unable_to_list:
+                if product_id in unable_to_list:
                     continue
 
                 # 判断此轮的上架成功个数
@@ -870,14 +881,14 @@ def process_store(row):
                             min_price <= int(product_data['min_price']) <= max_price):
                         if int(product_data['click']) <= maximum_views and int(product_data['cart']) <= maximum_traces:
                             # 满足条件，提交任务到线程池
-                            futures.append(executor.submit(ruten_instance.upload_products, product_data['product_id']))
+                            futures.append(executor.submit(ruten_instance.upload_products, product_id))
                         else:
-                            logging.info(f"{store}-{product_data['product_id']}-不做循环上下架处理(点阅数/追踪数)")
+                            logging.info(f"{store}-{product_id}-不做循环上下架处理(点阅数/追踪数)")
                     else:
-                        logging.info(f"{store}-{product_data['product_id']}-进行下架处理(价格)")
-                        remove_list.append(product_data['product_id'])
+                        logging.info(f"{store}-{product_id}-进行下架处理(价格)")
+                        remove_list.append(product_id)
                 else:
-                    logging.info(f"{store}-{product_data['product_id']}-不做循环上下架处理(标题空格数/销量)")
+                    logging.info(f"{store}-{product_id}-不做循环上下架处理(标题空格数/销量)")
 
             # 等待所有提交到线程池的任务完成
             for future in concurrent.futures.as_completed(futures):
@@ -891,8 +902,8 @@ def process_store(row):
                         remove_list.append(upload_data['after_listing_id'])
                     elif upload_data['code'] == 3:
                         remove_list.append(upload_data['product_id'])
-                except Exception as e:
-                    logging.error(f'{store}-上货发生错误: {e}')
+                except Exception:
+                    logging.exception(f'{store}-上货发生错误: {e}')
                     record_upload_error(store, upload_data['product_id'])
 
             if remove_list:

@@ -5,11 +5,15 @@ import gzip
 import daraz_api
 import json
 import 图鉴打码
+import concurrent.futures
+import time
+import 露天店铺快速上架
 
 from flask import Flask, request
 from logging_config import logging
 from 电商平台数据组装api import Alibaba
 from openai import OpenAI
+
 
 app = Flask(__name__)
 
@@ -102,11 +106,33 @@ def deepseek_chat():
         model=model,
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": content},
+                {"role": "user", "content": content},
         ],
         stream=False
     )
     return (response.choices[0].message.content)
+
+@app.route('/check_img', methods=['post'])
+def check_img():
+    ids = request.values.get('ids').strip()
+    id_list = ids.split(',')  # 将字符串拆分为列表
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        # 提交任务到线程池
+        future_to_id = {executor.submit(露天店铺快速上架.main, gn_o): gn_o for gn_o in id_list}
+
+        gn_o_list = []
+        # 获取任务结果
+        count = 0
+        for future in concurrent.futures.as_completed(future_to_id):
+            gn_o = future_to_id[future]
+            res = {
+                'count': count,
+                'gn_o': gn_o,
+                'status': future.result()
+            }
+            gn_o_list.append(res)
+            count += 1
+        return gn_o_list
 
 
 app.run(host='0.0.0.0', port=8803, debug=False)
