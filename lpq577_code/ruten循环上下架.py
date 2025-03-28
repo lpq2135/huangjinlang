@@ -224,7 +224,6 @@ class Ruten:
     # 创建通用请求函数
     def request_function(self, url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30):
         for attempt in range(8):
-            response = None  # 每次重试时初始化 response
             try:
                 # 使用实例的 session 发起请求
                 response = self.session.request(
@@ -627,9 +626,7 @@ class Ruten:
             logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架")
             return {'code': 4}
 
-    # 上传产品总流程
-    def upload_products(self, product_id):
-        # 判断上品的状态（前置条件）
+    def assembly_product_Package(self):
         product_status = self.product_items_v2(product_id)
         if not product_status:
             logging.warning(f'{self.store}-{product_id}-此商品已下架无需重新采集上架')
@@ -644,6 +641,39 @@ class Ruten:
             logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
             return {'code': 3, 'status': False, 'product_id': product_id}
         upload_data = product__data['data']
+
+        # 处理sku参数和 spec_info 的值(单规格或双规格)
+        if upload_data['spec_info']:
+            item_detail_dict, show_num = self.process_item_detail(upload_data['spec_info']['specs'])
+            spec_info = json.dumps(upload_data['spec_info'], ensure_ascii=False)
+        else:
+            # 无规格 item_detail 参数
+            item_detail_dict = {
+                'new_spec_name': '',
+                'item_detail_price_0': upload_data['direct_price'],
+                'item_detail_count_0': upload_data['remain_num'],
+                'item_detail_note_0': '',
+            }
+            spec_info = ''
+            show_num = upload_data['remain_num']
+
+    # 上传产品总流程
+    def upload_products(self, upload_product_package):
+        # 判断上品的状态（前置条件）
+        product_status = self.product_items_v2(product_id)
+        if not product_status:
+            logging.warning(f'{self.store}-{product_id}-此商品已下架无需重新采集上架')
+            return {'code': 1, 'status': False, 'product_id': product_id}
+
+        # 获取处理好的商品数据
+        product__data = self.process_upload_data(product_id)
+        if product__data['code'] == 1:
+            logging.warning(f'{self.store}-{product_id}-处理商品上货数据包失败')
+            return {'code': 1, 'status': False, 'product_id': product_id}
+        elif product__data['code'] == 3:
+            logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
+            return {'code': 3, 'status': False, 'product_id': product_id}
+        upload_data = product_data['data']
 
         # 处理sku参数和 spec_info 的值(单规格或双规格)
         if upload_data['spec_info']:
