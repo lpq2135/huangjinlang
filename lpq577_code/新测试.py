@@ -160,7 +160,7 @@ def generate_spec_info(data_json):
                 'spec_name': d_new[parent_id],
                 'spec_num': '0',
                 'spec_status': 'Y',
-                'childs': list(children.keys()),
+                'childs': children,
                 'spec_ext': {'goods_no': None}
             }
 

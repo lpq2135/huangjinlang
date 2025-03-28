@@ -13,6 +13,7 @@ import string
 import pandas as pd
 import concurrent.futures
 
+from 电商平台爬虫api.api_ruten import Ruten
 from requests.adapters import HTTPAdapter
 from 数据库连接 import MySqlPool
 from datetime import datetime
@@ -190,14 +191,9 @@ def get_the_id_that_cannot_be_listed(store):
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-class Ruten:
-    def __init__(self, store, upload_count):
+class RutenUpload(Ruten):
+    def __init__(self, store):
         self.store = store
-        self.proxies = proxies
-
-        # 创建独立的 Session 对象
-        self.session = requests.Session()
-
         cookie = self.get_cookie_by_api()
         if cookie is None:
             raise ValueError(f'{self.store}-获取cookie异常导致此线程结束')
@@ -208,53 +204,10 @@ class Ruten:
         self.g_pay_way = None
         self.g_deliver_way = None
         if self.get_payment_and_shipping(self.store) is False:
-            self.close()
             raise ValueError(f'{self.store}-在数据库找不到店铺的付款运输方式')
-        self.upload_count = upload_count
-        self.initial_count = 0
         if self.check_store_status(self.store) is False:
-            self.close()
             raise ValueError(f'{self.store}-店铺状态异常(线程终止)')
         self.lock = Lock()
-
-    # 显式关闭 Session 对象
-    def close(self):
-        self.session.close()
-
-    # 创建通用请求函数
-    def request_function(self, url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30):
-        for attempt in range(8):
-            try:
-                # 使用实例的 session 发起请求
-                response = self.session.request(
-                    url=url,
-                    method=method.upper(),
-                    headers=headers,
-                    data=data,
-                    proxies=proxies,
-                    files=files,
-                    timeout=timeout
-                )
-                # 检查响应状态码
-                response.raise_for_status()  # 如果响应状态码不是 2xx，将抛出异常
-                return response
-            except ReadTimeout as e:
-                # 单独处理超时错误
-                logging.warning(f"请求超时 ({method}-{url}): {e}. 重试中... ({attempt + 1}/8)")
-                time.sleep(2 ** attempt)  # 指数退避策略
-            except RequestException as e:
-                # 处理其他请求异常
-                if hasattr(e, 'response') and e.response is not None:
-                    if e.response.status_code == 404:
-                        return e.response
-                logging.warning(f"请求错误 ({method}-{url}): {e}. 重试中... ({attempt + 1}/8)")
-                time.sleep(2 ** attempt)
-            except Exception as e:
-                # 处理其他未知异常
-                logging.error(f"未知错误 ({method}-{url}): {e}")
-                return None
-        logging.error(f"请求失败，已重试 8 次: {url}")
-        return None
 
     # 获取店铺对应的付款和运输方式
     def get_payment_and_shipping(self, store):
@@ -277,36 +230,6 @@ class Ruten:
     @property
     def current_month(self):
         return datetime.now().strftime("%Y%m")
-
-    # 获取商品数据包
-    def get_product_package(self, product_id):
-        url = f'https://www.ruten.com.tw/item/show?{product_id}'
-        cookies = {
-            "_cfuvid": "_CH_Nx_bYg9Q3tPA42nSf0rzNshiFWV63ofzzsw7_QQ-1740457574750-0.0.1.1-604800000",
-            "x-hng": "lang=zh-CN&domain=www.ruten.com.tw",
-            "_ga": "GA1.1.925149236.1740457572",
-            "_ts_id": "20250225200792387309.1740457576",
-            "_fbp": "fb.2.1740457572410.613730098481646494",
-            "_clck": "1mztmfc%7C2%7Cftt%7C0%7C1882",
-            "_clsk": "1xvygqj%7C1740729396184%7C4%7C0%7Cn.clarity.ms%2Fcollect",
-            "_ts_session": "rtk8anlsmz",
-            "adultchk": "ok",
-            "_ga_2VP4WXLL56": "GS1.1.1740738889.14.1.1740738902.47.0.0",
-            "_ts_session_spent": "23762",
-        }
-        cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
-        headers = {
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'cookie': cookie_str
-            }
-        response = self.request_function(url, headers=headers)
-        match = re.search(r'(?<=RT\.context\ =\ ).*(?=;)', response.text)
-        if match:
-            try:
-                return match.group(0)
-            except Exception as e:
-                logging.warning(f'获取商品数据包失败-{product_id}, 错误信息: {e}')
-        return None
 
     # 检查店铺状态
     def check_store_status(self, store):
@@ -405,41 +328,6 @@ class Ruten:
             except Exception as e:
                 logging.warning(f'{self.store}-获取第{page}页商品信息失败, 错误信息：{e}')
         return None
-
-    # 处理上货数据
-    def process_upload_data(self, product_id):
-        try:
-            # 获取商品数据包
-            product_data = json.loads(self.get_product_package(product_id))
-            if not product_data:
-                return {'code': 1}  # 如果没有数据包，直接返回 None
-
-            # 获取商品描述
-            description = self.get_description(product_id, product_data['item']['descriptionUrl'])
-            if not description:
-                return {'code': 1}  # 如果没有描述，直接返回 None
-
-            # 判断主图是否异常
-            main_images = product_data['item']['images']
-            if main_images is None:
-                return {'code': 3}
-
-            # 构建上传数据
-            upload_data = {
-                'name': product_data['item']['name'],
-                'mode': product_data['item']['mode'],
-                'main_images': [i['original'] for i in main_images],
-                'category_id': product_data['item']['class'],
-                'direct_price': product_data['item']['directPrice'],
-                'remain_num': product_data['item']['remainNum'],
-                'spec_info': product_data['item']['specInfo'],
-                'description': description,
-            }
-            return {'code': 0, 'data': upload_data}  # 返回上传数据
-
-        except Exception as e:
-            logging.error(f'{self.store}-{product_id}-处理上货数据包失败, 错误信息：{e}')
-            return {'code': 1}  # 如果出现异常，返回 None
 
     # 处理类目编号
     def process_category_id(self, category_id):
@@ -674,21 +562,6 @@ class Ruten:
             logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
             return {'code': 3, 'status': False, 'product_id': product_id}
         upload_data = product_data['data']
-
-        # 处理sku参数和 spec_info 的值(单规格或双规格)
-        if upload_data['spec_info']:
-            item_detail_dict, show_num = self.process_item_detail(upload_data['spec_info']['specs'])
-            spec_info = json.dumps(upload_data['spec_info'], ensure_ascii=False)
-        else:
-            # 无规格 item_detail 参数
-            item_detail_dict = {
-                'new_spec_name': '',
-                'item_detail_price_0': upload_data['direct_price'],
-                'item_detail_count_0': upload_data['remain_num'],
-                'item_detail_note_0': '',
-            }
-            spec_info = ''
-            show_num = upload_data['remain_num']
 
         # 获取上传所需ck值
         while True:
