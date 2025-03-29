@@ -3,12 +3,12 @@ import re
 import json
 from lxml import html
 from bs4 import BeautifulSoup
-from api_1688 import BaseCrawler
+from 电商平台爬虫api.basic_assistanc import BaseCrawler
 
 class Ruten(BaseCrawler):
     def __init__(self, product_id):
         self.product_id = product_id
-        self.product_data = None
+        self.product_data = self.get_product_package()
 
     def get_product_package(self):
         """获取商品数据包"""
@@ -76,7 +76,6 @@ class Ruten(BaseCrawler):
 
     def build_product_package(self):
         """组装数据包"""
-        self.product_data = self.get_product_package()
         # 商品数据包异常
         if not self.product_data:
             return {'platform': 'ruten', 'code': 4, 'message': '商品数据包异常', 'product_id': self.product_id}
@@ -165,6 +164,6 @@ class Ruten(BaseCrawler):
 
 
 if __name__ == '__main__':
-    res = Ruten('22350344904512')
+    res = Ruten('22513036164036')
     product_data = res.build_product_package()
     print(product_data)
