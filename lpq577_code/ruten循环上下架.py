@@ -498,7 +498,46 @@ class RutenUpload(BaseCrawler):
             logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架")
             return {'code': 4}
 
+    def price_conversion(self, data, price_multi, price_add):
+        """把本地价格转换成上架的价格"""
+        specifications = data['data']['specifications']
+        if specifications == 0:
+            data['data']['skumodel']['price'] = int(float(data['data']['skumodel']['price']) * float(price_multi) + float(price_add))
+        else:
+            for i in data['data']['skumodel']['sku_data']['sku_parameter']:
+                i['price'] = int(float(i['price']) * float(price_multi) + float(price_add))
+        return data
+
+    def structure_sku_data(self, product_data):
+        """构造sku的露天标准格式"""
+        specifications = product_data['data']['specifications']
+        # 规格不等于 0
+        if specifications != 0:
+            spec_info, g_direct_price = self.generate_spec_info_by_ruten(product_data)
+            item_detail_dict, show_num = self.process_item_detail(spec_info['specs'])
+        # 规格等于 0
+        else:
+            show_num = product_data['data']['skumodel']['sku_data']['stock']
+            g_direct_price = product_data['data']['skumodel']['sku_data']['price']
+            # 无规格 item_detail 参数
+            item_detail_dict = {
+                'new_spec_name': '',
+                'item_detail_price_0': g_direct_price,
+                'item_detail_count_0': show_num,
+                'item_detail_note_0': '',
+            }
+            spec_info = ''
+        return {
+            'specifications': specifications,
+            'spec_info': spec_info,
+            'g_direct_price': g_direct_price,
+            'item_detail_dict': item_detail_dict,
+            'show_num': show_num
+        }
+
     def cycle_on_and_off_shelves(self, product_id):
+        price_multi = 1
+        price_add = 0
         # 判断上品的状态（前置条件）
         product_status = self.product_items_v2(product_id)
         if not product_status:
@@ -515,22 +554,11 @@ class RutenUpload(BaseCrawler):
             logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
             return {'code': 'upload_3', 'status': False, 'product_id': product_id}
 
-        specifications = product_data['data']['specifications']
-        if specifications != 0:
-            spec_info, g_direct_price = self.generate_spec_info_by_ruten(product_data)
-            item_detail_dict, show_num = self.process_item_detail(spec_info['specs'])
+        # 进行价格转换
+        product_data = self.price_conversion(product_data, price_multi, price_add)
 
-        else:
-            show_num = product_data['data']['skumodel']['sku_data']['stock']
-            g_direct_price = product_data['data']['skumodel']['sku_data']['price']
-            # 无规格 item_detail 参数
-            item_detail_dict = {
-                'new_spec_name': '',
-                'item_detail_price_0': g_direct_price,
-                'item_detail_count_0': show_num,
-                'item_detail_note_0': '',
-            }
-            spec_info = ''
+        # 构造 sku 标准露天格式
+        sku_data = self.structure_sku_data(product_data)
 
         # 获取大量修改的表单数据
         modify_data = self.process_user_class(product_id)
@@ -561,11 +589,11 @@ class RutenUpload(BaseCrawler):
             html_new = html_add + '<br>' + product_data['data']['details_text_description']
 
         upload_product_package = {
-            'specifications': specifications,
-            'spec_info': spec_info,
-            'item_detail_dict': item_detail_dict,
-            'g_direct_price': g_direct_price,
-            'show_num': show_num,
+            'specifications': sku_data['specifications'],
+            'spec_info': sku_data['spec_info'],
+            'item_detail_dict': sku_data['item_detail_dict'],
+            'g_direct_price': sku_data['g_direct_price'],
+            'show_num': sku_data['show_num'],
             'title': title,
             'main_images': product_data['data']['main_images'],
             'user_class_select': user_class_select,
@@ -822,8 +850,8 @@ def process_store(row):
             page_num = 200 if page_num == 1 else page_num - 1
 
 
-# 设置日志配置
-logging_config.setup_logger()
+# # 设置日志配置
+# logging_config.setup_logger()
 
 # mysql_pool = MySqlPool(host='rm-gw80g135076f1osh41o.mysql.germany.rds.aliyuncs.com', password='Qiang123@', user='huangjinlang', database='ruten_upload')
 # if __name__ == '__main__':

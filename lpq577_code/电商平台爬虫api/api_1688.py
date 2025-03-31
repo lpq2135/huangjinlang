@@ -9,7 +9,7 @@ import logging
 from PIL import Image
 from bs4 import BeautifulSoup
 from io import BytesIO
-from basic_assistanc import BaseCrawler
+from 电商平台爬虫api.basic_assistanc import BaseCrawler
 
 
 class Alibaba(BaseCrawler):
