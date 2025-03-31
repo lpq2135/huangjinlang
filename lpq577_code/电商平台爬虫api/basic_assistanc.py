@@ -3,12 +3,13 @@ import random
 import string
 import logging
 import time
+from opencc import OpenCC
 from requests.exceptions import ReadTimeout, RequestException
 
 
 class BaseCrawler:
     """所有爬虫类的基类，包含共用方法"""
-    def request_function(self, url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30, max_retries=5):
+    def request_function(self, url, method='GET', headers=None, data=None, proxies=None, files=None, timeout=30, max_retries=6):
         """通用的请求方法"""
         # 进行最多max_retries次重试
         for attempt in range(max_retries):
@@ -156,3 +157,29 @@ class BaseCrawler:
     def split_list(self, input_list):
         """将输入列表分成多个子列表，每个子列表最多包含 chunk_size 个元素"""
         return [input_list[i:i + 30] for i in range(0, len(input_list), 30)]
+
+    def zh_to_tw(self, data):
+        converter = OpenCC('s2tw')
+        # 提取重复路径
+        sku_data = data['data']['skumodel']['sku_data']
+        # 转换标题
+        data['data']['title'] = converter.convert(data['data']['title'])
+        # 转换规格参数
+        if data['data']['specifications'] != 0:
+            # 属性名转换
+            sku_data['sku_property_name'] = {k: converter.convert(v) for k, v in sku_data['sku_property_name'].items()}
+            # 参数列表转换
+            for param in sku_data['sku_parameter']:
+                param['name'] = converter.convert(param['name'])
+        # 转换详情描述
+        if isinstance(data['data']['details_text_description'], list):
+            data['data']['details_text_description'] = [converter.convert(i) for i in data['data']['details_text_description']]
+        else:
+            data['data']['details_text_description'] = converter.convert(data['data']['details_text_description'])
+        return data  # 明确返回值
+
+if __name__ == '__main__':
+    data = {'platform': '1688', 'code': 0, 'message': '请求成功', 'data': {'product_id': '895157423598', 'specifications': 2, 'unit_weight': 0.02, 'start_amount': 1, 'title': '一加13钢化膜边胶无尘仓Reno13pro秒贴盒曲面findX8pro手机膜适用', 'main_images': ['https://cbu01.alicdn.com/img/ibank/O1CN013qBbQ91fjHw997Gce_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01s2NUiz1fjHw8BAYYi_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01g64Fsg1fjHw816Xwd_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01c1SyEx1fjHw7B9Uvb_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01yBD54N1fjHw9gGFny_!!2218330604042-0-cib.jpg'], 'skumodel': {'sku_data': {'sku_property_name': {'sku1_property_name': '颜色', 'sku2_property_name': '尺寸'}, 'sku_parameter': [{'remote_id': '895157423598_yLYeKrJ6Ro', 'name': '四边胶款无尘仓秒贴盒-高清||1+13（超声波解锁）', 'imageUrl': None, 'price': '4.50', 'stock': 949}, {'remote_id': '895157423598_mtISahSUoi', 'name': '四边胶款无尘仓秒贴盒-高清||Reno13pro', 'imageUrl': None, 'price': '4.50', 'stock': 986}, {'remote_id': '895157423598_zQUyr5KALo', 'name': '四边胶款无尘仓秒贴盒-高清||findX8pro', 'imageUrl': None, 'price': '4.50', 'stock': 987}, {'remote_id': '895157423598_jBifSo2utD', 'name': '四边胶款无尘仓秒贴盒-高清||Reno3pro/Reno4pro/Reno5pro/Reno6pro', 'imageUrl': None, 'price': '4.50', 'stock': 953}, {'remote_id': '895157423598_vR99bftp5D', 'name': '四边胶款无尘仓秒贴盒-高清||findX6pro/findX7ultra', 'imageUrl': None, 'price': '4.50', 'stock': 905}, {'remote_id': '895157423598_lIjLhLlSGB', 'name': '四边胶款无尘仓秒贴盒-高清||真我10pro+/真我13pro+', 'imageUrl': None, 'price': '4.50', 'stock': 903}, {'remote_id': '895157423598_IAJvDCOvUa', 'name': '四边胶款无尘仓秒贴盒-高清||findX3/1+ACE2/1+11/1+11R/findX5pro/1+9pro/1+10pro/', 'imageUrl': None, 'price': '4.50', 'stock': 909}]}}, 'video': 'https://cloud.video.taobao.com/play/u/2218330604042/p/2/e/6/t/1/510298916352.mp4', 'details_text_description': ['品牌:其他', '材质:钢化玻璃', '贴膜类型:前膜', '贴膜特点:高清,防爆,防尘,防指纹,防摔,全屏,秒贴盒', '颜色:四边胶款无尘仓秒贴盒-高清', '尺寸:1+13（超声波解锁）,Reno13pro,findX8pro,Reno3pro/Reno4pro/Reno5pro/Reno6pro,findX6pro/findX7ultra,真我10pro+/真我13pro+,findX3/1+ACE2/1+11/1+11R/findX5pro/1+9pro/1+10pro/', '适用机型:OPPO'], 'detailed_picture': ['https://cbu01.alicdn.com/img/ibank/O1CN013qBbQ91fjHw997Gce_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01s2NUiz1fjHw8BAYYi_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01g64Fsg1fjHw816Xwd_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01c1SyEx1fjHw7B9Uvb_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01ImKSBg1fjHw8d6UsT_!!2218330604042-0-cib.jpg']}}
+    base = BaseCrawler()
+    res = base.zh_to_tw(data)
+    print(res)

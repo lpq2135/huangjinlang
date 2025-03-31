@@ -3,7 +3,8 @@ import re
 import json
 from lxml import html
 from bs4 import BeautifulSoup
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
+# from 电商平台爬虫api.basic_assistanc import BaseCrawler
+from basic_assistanc import BaseCrawler
 
 class Ruten(BaseCrawler):
     def __init__(self, product_id):
@@ -164,6 +165,6 @@ class Ruten(BaseCrawler):
 
 
 if __name__ == '__main__':
-    res = Ruten('22513036164036')
+    res = Ruten('22315417806403')
     product_data = res.build_product_package()
     print(product_data)

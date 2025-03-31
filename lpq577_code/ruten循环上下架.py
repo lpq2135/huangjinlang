@@ -189,7 +189,7 @@ def get_the_id_that_cannot_be_listed(store):
         mysql_pool.close_mysql(cnx, cursor)
 
 class RutenUpload(BaseCrawler):
-    def __init__(self, store):
+    def __init__(self, store, upload_count=None):
         self.store = store
         cookie = self.get_cookie_by_api()
         if cookie is None:
@@ -204,6 +204,8 @@ class RutenUpload(BaseCrawler):
             raise ValueError(f'{self.store}-在数据库找不到店铺的付款运输方式')
         if self.check_store_status(self.store) is False:
             raise ValueError(f'{self.store}-店铺状态异常(线程终止)')
+        self.upload_count = upload_count
+        self.initial_count = 0
         self.lock = Lock()
 
     # 获取店铺对应的付款和运输方式
@@ -513,7 +515,8 @@ class RutenUpload(BaseCrawler):
             logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
             return {'code': 'upload_3', 'status': False, 'product_id': product_id}
 
-        if product_data['data']['specifications'] != 0:
+        specifications = product_data['data']['specifications']
+        if specifications != 0:
             spec_info, g_direct_price = self.generate_spec_info_by_ruten(product_data)
             item_detail_dict, show_num = self.process_item_detail(spec_info['specs'])
 
@@ -547,13 +550,18 @@ class RutenUpload(BaseCrawler):
         title = self.process_title(product_data['data']['title'])
 
         # 商品详情
-        html_add = """<p><span style="font-size: 24pt; background-color: #ff0000;"><strong><span style="color: #000000;">溫馨提示：</span></strong></span></p>
-                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">1??本店所屬</span></strong></span><span style="background-color: #ccffff;"><span style="color: #800000;" color="#800000"><span style="font-size: 18.6667px;"><b></b></span></span></span><strong style="color: #800000; font-size: 14pt;"><span style="background-color: #ccffff;">公司長期運營，品質第一，售後無憂！</span></strong></p>
-                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">2??本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服！</span></strong></span></p>
-                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">3??支持大量採購，支持全網比價，可帶圖帶產品詢價，歡迎與您長期合作！</span></strong></span></p>"""
-        html_new = html_add + '<br>' + product_data['data']['details_text_description']
+        html_old = product_data['data']['details_text_description']
+        if '本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服' in html_old:
+            html_new = html_old
+        else:
+            html_add = """<p><span style="font-size: 24pt; background-color: #ff0000;"><strong><span style="color: #000000;">溫馨提示：</span></strong></span></p>
+                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">1️⃣本店所屬</span></strong></span><span style="background-color: #ccffff;"><span style="color: #800000;" color="#800000"><span style="font-size: 18.6667px;"><b></b></span></span></span><strong style="color: #800000; font-size: 14pt;"><span style="background-color: #ccffff;">公司長期運營，品質第一，售後無憂！</span></strong></p>
+                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">2️⃣本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服！</span></strong></span></p>
+                                <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">3️⃣支持大量採購，支持全網比價，可帶圖帶產品詢價，歡迎與您長期合作！</span></strong></span></p>"""
+            html_new = html_add + '<br>' + product_data['data']['details_text_description']
 
         upload_product_package = {
+            'specifications': specifications,
             'spec_info': spec_info,
             'item_detail_dict': item_detail_dict,
             'g_direct_price': g_direct_price,
@@ -632,7 +640,7 @@ class RutenUpload(BaseCrawler):
             'user_class_select': upload_product_package['user_class_select'],  # 后台自自定义分类编码
             'g_mode': 'B',  # mode
             'g_direct_price': upload_product_package['g_direct_price'],
-            'spec_info': json.dumps(upload_product_package['spec_info']),  # sku数据包
+            'spec_info': json.dumps(upload_product_package['spec_info']) if upload_product_package['specifications'] != 0 else '',  # sku数据包
             'show_num': upload_product_package['show_num'],  # 总库存数量
             'is_goods_sale': '0',  # 銷售時間設定 0: 立即销售  1: 指定销售时间
             'sale_start_time': '',  # 銷售時間設定-开始时间(如果 is_goods_sale=1,此参数必填)
@@ -727,12 +735,12 @@ def process_store(row):
     logging.info(f'{store}-当日商品已上传{upload_count}')
 
     # 创建 Ruten 实例
-    ruten_instance = Ruten(store, upload_count)
+    ruten_instance = RutenUpload(store)
 
     # 开始检查是否有需要下架的商品id
     remove_list = get_id_to_be_removed(store)
     if remove_list:
-        remove_list_new = split_list(remove_list)
+        remove_list_new = ruten_instance.split_list(remove_list)
         for sublist in remove_list_new:
             ruten_instance.remove_products(sublist)
         logging.info(f'{store}-需要下架id处理完成')
@@ -885,5 +893,5 @@ logging_config.setup_logger()
 
 if __name__ == '__main__':
     ruten_uplaod = RutenUpload('josephines')
-    res = ruten_uplaod.cycle_on_and_off_shelves('22513033501724')
+    res = ruten_uplaod.cycle_on_and_off_shelves('22502610710286')
     print(res)

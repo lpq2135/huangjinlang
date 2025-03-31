@@ -9,6 +9,7 @@ import logging
 from PIL import Image
 from bs4 import BeautifulSoup
 from io import BytesIO
+from basic_assistanc import BaseCrawler
 
 
 class Alibaba(BaseCrawler):
@@ -282,13 +283,9 @@ class Alibaba(BaseCrawler):
 
 
 if __name__ == '__main__':
-    file_path = r'C:\Users\Administrator\Desktop\product_id_deduplication_by_huangjinlang.txt'
-    with open(file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-    for i in lines:
-        res = Alibaba(i.strip())
-        try:
-            res1 = res.build_product_package()
-            print(res1)
-        except Exception as e:
-            print(e)
+    res = Alibaba('895157423598')
+    try:
+        res1 = res.build_product_package()
+        print(res1)
+    except Exception as e:
+        print(e)
