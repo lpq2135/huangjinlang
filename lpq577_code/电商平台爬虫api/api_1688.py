@@ -9,7 +9,8 @@ import logging
 from PIL import Image
 from bs4 import BeautifulSoup
 from io import BytesIO
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
+# from 电商平台爬虫api.basic_assistanc import BaseCrawler
+from basic_assistanc import BaseCrawler
 
 
 class Alibaba(BaseCrawler):
@@ -145,7 +146,7 @@ class Alibaba(BaseCrawler):
             Filter_words = ['专利', '跨境', '货号', '下游', '订制', '地区', '授权', '进口', 'LOGO', '上市', '是否', '加工',
                             '货源',
                             '产地', '形象', '代理', '售后']
-            attribute_list = [(f"{x['name']}:{x['value']}") for x in data['propsList'] if
+            attribute_list = [(f"{x['name']} : {x['value']}") for x in data['propsList'] if
                               all(word not in x['name'] for word in Filter_words) and x['value'] != '/']
             return attribute_list
         return None
@@ -283,7 +284,7 @@ class Alibaba(BaseCrawler):
 
 
 if __name__ == '__main__':
-    res = Alibaba('895157423598')
+    res = Alibaba('894540636861')
     try:
         res1 = res.build_product_package()
         print(res1)
