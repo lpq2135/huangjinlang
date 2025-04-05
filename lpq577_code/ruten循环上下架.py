@@ -115,8 +115,53 @@ def record_main_image_error(store, product_id):
 
     except Exception as e:
         # 如果发生异常，记录错误日志并回滚事务
-        logging.warning('记录主图信息异常, store: %s, product_id: %s, error: %s', store, product_id, str(e))
+        logging.warning('记录上传失败的商品ID异常, store: %s, product_id: %s, error: %s', store, product_id, str(e))
         cnx.rollback()  # 回滚事务，避免无效或部分更新的数据
+
+    finally:
+        # 关闭数据库连接和游标
+        mysql_pool.close_mysql(cnx, cursor)
+
+# 记录类目id
+def record_category_id(category_id, is_valid):
+    cnx, cursor = mysql_pool.get_conn()
+    try:
+        # 使用 ON DUPLICATE KEY UPDATE 实现 "存在则更新，不存在则插入"
+        cursor.execute(
+            """
+            INSERT INTO category_id_record (category_id, is_valid) 
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE is_valid = %s
+            """,
+            (category_id, is_valid, is_valid)  # 第三个 %s 用于 UPDATE
+        )
+        cnx.commit()
+
+    except Exception as e:
+        # 如果发生异常，记录错误日志并回滚事务
+        logging.warning('记录类目id信息异常, category_id: %s, error: %s', category_id, str(e))
+        cnx.rollback()  # 回滚事务，避免无效或部分更新的数据
+
+    finally:
+        # 关闭数据库连接和游标
+        mysql_pool.close_mysql(cnx, cursor)
+
+# 获取类目id状态
+def get_category_id_status(category_id):
+    cnx, cursor = mysql_pool.get_conn()
+    try:
+        cursor.execute(
+            """
+            SELECT is_valid FROM category_id_record WHERE category_id = %s
+            """,
+            (category_id,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    except Exception as e:
+        # 如果发生异常，记录错误日志并回滚事务
+        logging.warning('获取类目id状态异常, category_id: %s, error: %s', category_id, str(e))
 
     finally:
         # 关闭数据库连接和游标
@@ -381,19 +426,31 @@ class RutenUpload(BaseCrawler):
 
     # 处理类目编号
     def process_category_id(self, category_id):
-        # 判断类目是否为最底层:
+        category_id = str(category_id)
+        # 从数据库获取类目id是否可用
+        category_id_status = get_category_id_status(category_id)
+        if category_id_status:
+            if category_id_status == '1':
+                return category_id
+            return '00090014'
+
         timestamp = int(time.time() * 1000)
+
+        # 判断类目是否为最底层:
         get_category_url = f'https://mybid.ruten.com.tw/upload/ajax_category.php?g_class={category_id}&_={timestamp}'
         category_response = self.request_function(get_category_url, headers=self.headers).json()
         if category_response['is_valid'] is False:
+            record_category_id(category_id, '0')
             return '00090014'
 
         # 判断类目是否为管制类目:
         regulations_url = f'https://rapi.ruten.com.tw/api/seller/v1/common/cate/{category_id}/regulations'
         regulations_response = self.request_function(regulations_url, headers=self.headers).json()
         if regulations_response['data']['bsmi_status'] == 1 or regulations_response['data']['ncc_status'] == 1:
+            record_category_id(category_id, '0')
             return '00090014'
 
+        record_category_id(category_id, '1')
         return category_id
 
     def get_class(self, text):

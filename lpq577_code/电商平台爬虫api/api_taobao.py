@@ -28,8 +28,8 @@ class TaoBao(BaseCrawler):
     def get_videos(self):
         """获取商品视频"""
         if 'videos' in self.data['data']['item']:
-            main_images = self.data['data']['item']['videos'][0]['url']
-            return main_images
+            video = self.data['data']['item']['videos'][0]['url']
+            return video
         return None
 
     def get_sku_price(self, specifications, skus=None, vid=None, pid=None):
@@ -90,7 +90,7 @@ class TaoBao(BaseCrawler):
         """组装数据包"""
         # props 数据包包含了sku的详细信息
         props = self.data['data']['skuBase'].get('props', [])
-        # 规格
+        # 规格数
         specifications = len(props)
 
         if specifications == 0:

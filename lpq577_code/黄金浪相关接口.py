@@ -18,6 +18,7 @@ from ruten循环上下架 import RutenUpload
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.api_taobao import TaoBao
 from 象寄翻译 import XiangJi
+from 电商平台爬虫api.api_pinduoduo import PinDuoDuo
 
 app = Flask(__name__)
 
@@ -127,6 +128,7 @@ def upload_to_ruten():
     # 根据平台获取不同的参数
     if platform == '1688' or platform == 'ruten':
         product_id = request.values.get('product_id')
+
     elif platform == 'taobao':
         source_base64 = request.values.get('source_base64')
         source_base64 = source_base64.replace(' ', '+')
@@ -141,8 +143,16 @@ def upload_to_ruten():
         detail_img = request.values.get('detail_img')
         detail_img_list = detail_img.split(',')
         detail_img_list_new = ['https:' + img if 'https:' not in img else img for img in detail_img_list]
+
     elif platform == 'pinduoduo':
-        pass
+        source_base64 = request.values.get('source_base64')
+        source_base64 = source_base64.replace(' ', '+')
+        # Base64解码
+        decoded_data = base64.b64decode(source_base64)
+        # Gzip解压缩
+        decompressed_data = gzip.decompress(decoded_data)
+        # 解码为UTF-8字符串
+        source = decompressed_data.decode('utf-8')
 
     category_id = request.values.get('category_id')
     background_classification = request.values.get('background_classification')
@@ -162,7 +172,7 @@ def upload_to_ruten():
             max_count = 10
 
     # 创建 RutenUpload 的实例
-    ruten_uplaod_instance = RutenUpload(store, is_add_main_logo=is_add_main_logo)
+    ruten_uplaod_instance = RutenUpload(store, is_add_main_logo=is_add_main_logo, img_save_path=img_save_path)
 
     # 创建各个平台的实例并组装差别参数
     if platform == '1688':
@@ -184,6 +194,11 @@ def upload_to_ruten():
         product_data = taobao_instance.build_product_package()
         product_id = product_data['data']['product_id']
 
+    elif platform == 'pinduoduo':
+        pinduoduo_instance = PinDuoDuo(json.loads(source))
+        product_data = pinduoduo_instance.build_product_package()
+        product_id = product_data['data']['product_id']
+
     # 进行价格转换
     product_data = ruten_uplaod_instance.price_conversion(product_data, price_multi, price_add)
 
@@ -191,7 +206,7 @@ def upload_to_ruten():
     product_data = ruten_uplaod_instance.zh_to_tw(product_data)
 
     # 组装最终的html格式
-    if platform == '1688':
+    if platform == '1688' or platform == 'pinduoduo':
         detail_html = ruten_uplaod_instance.construction_details_html(product_data['data']['details_text_description'], product_data['data']['detailed_picture'])
     elif platform == 'ruten':
         detail_html = product_data['data']['details_text_description']
