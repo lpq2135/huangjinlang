@@ -3,14 +3,15 @@ import re
 import json
 from lxml import html
 from bs4 import BeautifulSoup
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
-# from basic_assistanc import BaseCrawler
+from .basic_assistanc import BaseCrawler
 
 
 class Ruten(BaseCrawler):
-    def __init__(self, product_id):
+    def __init__(self, product_id, proxies=None):
+        self.proxies = proxies
         self.product_id = product_id
         self.product_data = self.get_product_package()
+        self.headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
 
     def get_product_package(self):
         """获取商品数据包"""
@@ -33,7 +34,7 @@ class Ruten(BaseCrawler):
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'cookie': cookie_str
             }
-        response = self.request_function(url, headers=headers)
+        response = self.request_function(url, headers=headers, proxies=self.proxies)
         match = re.search(r'(?<=RT\.context\ =\ ).*(?=;)', response.text)
         if match:
             try:
@@ -51,7 +52,7 @@ class Ruten(BaseCrawler):
             'referer': f'https://www.ruten.com.tw/item/show?{self.product_id}'
         }
         # 请求详情链接获取 html 数据
-        html_data = self.request_function(description_url, headers=headers).text
+        html_data = self.request_function(description_url, headers=headers, proxies=self.proxies).text
         # 格式化 html 数据
         if html_data:
             try:
@@ -67,6 +68,20 @@ class Ruten(BaseCrawler):
         """获取商品标题"""
         title = self.product_data['item']['name']
         return title
+
+    def get_ids_by_reception(self, keywords):
+        """通过前台搜索词v3和v1接口获取商品id和商品信息"""
+        v3_url = f'https://rtapi.ruten.com.tw/api/search/v3/index.php/core/prod?q={keywords}&type=direct&sort=rnk%2Fdc&limit=60&offset=1'
+        v3_result = self.request_function(v3_url, headers=self.headers).json()
+        v3_ids = ','.join(i['Id'] for i in v3_result['Rows'])
+        v3_data = self.get_titles_by_v2(v3_ids)
+        return v3_data
+
+    def get_titles_by_v2(self, ids):
+        """通过ids获取商品信息"""
+        v2_url = f'https://rtapi.ruten.com.tw/api/prod/v2/index.php/prod?id={ids}'
+        v2_result = self.request_function(v2_url, headers=self.headers).json()
+        return v2_result
 
     def get_main_images(self):
         """获取商品主图"""

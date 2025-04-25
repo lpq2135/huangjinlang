@@ -73,7 +73,7 @@
  [],
  False,
  False,
- 1743849875,
+ 1745309496,
  [('run.exe',
    'C:\\Users\\Administrator\\PycharmProjects\\pythonProject\\huangjinlang\\.venv\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\run.exe',
    'EXECUTABLE')],

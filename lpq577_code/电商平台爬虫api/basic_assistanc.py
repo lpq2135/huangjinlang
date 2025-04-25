@@ -5,6 +5,8 @@ import logging
 import time
 import os
 import io
+from urllib.parse import urlparse, urlunparse
+
 
 from opencc import OpenCC
 from PIL import Image, ImageEnhance
@@ -79,6 +81,10 @@ class BaseCrawler:
         price_list = [int(float(i['price'])) for i in sku_parameters]
         min_price = min(price_list) if price_list else 0
 
+        # 结算总库存
+        stock_data = [int(float(i['stock'])) for i in sku_parameters]
+        total_stock = sum(stock_data)
+
         # 初始化数据结构
         structure = {}
         specs = {}
@@ -86,7 +92,7 @@ class BaseCrawler:
 
         # 单规格处理
         if specifications == 1:
-            for item in sku_parameters:
+            for item in sku_parameters[:30]:
                 temp_id = 'temp_' + self.generate_random_number()
                 structure[temp_id] = []
 
@@ -94,7 +100,7 @@ class BaseCrawler:
                     'spec_id': temp_id,
                     'parent_id': 0,
                     'spec_name': item['name'][:20],
-                    'spec_num': item['stock'],
+                    'spec_num': item['stock'] if 100 <= total_stock <= 9998 else 249,
                     'spec_price': item['price'],
                     'spec_status': 'Y',
                     'childs': [],
@@ -144,7 +150,7 @@ class BaseCrawler:
                         'spec_id': child_id,
                         'parent_id': parent_id,
                         'spec_name': d_new[child_id][:20],
-                        'spec_num': sku_item['stock'] if sku_item else 499,
+                        'spec_num': sku_item['stock'] if sku_item and 100 <= total_stock <= 9998 else 249,
                         'spec_price': sku_item['price'] if sku_item else min_price,
                         'spec_status': 'Y' if sku_item else 'N',
                         'childs': [],
@@ -162,6 +168,22 @@ class BaseCrawler:
     def split_list(self, input_list):
         """将输入列表分成多个子列表，每个子列表最多包含 chunk_size 个元素"""
         return [input_list[i:i + 30] for i in range(0, len(input_list), 30)]
+
+    def enforce_https(self, url):
+        """格式话图片url"""
+        if url.startswith('//'):
+            # 处理协议相对URL (//example.com)
+            fixed_url = 'https:' + url
+        elif url.startswith('http://'):
+            # 替换HTTP为HTTPS
+            fixed_url = url.replace('http://', 'https://', 1)
+        elif not url.startswith('https://'):
+            # 处理无协议URL (example.com)
+            fixed_url = 'https://' + url.lstrip('/')
+        else:
+            # 已经是HTTPS
+            fixed_url = url
+        return fixed_url
 
     def zh_to_tw(self, data):
         """翻译成繁体"""
@@ -201,11 +223,26 @@ class BaseCrawler:
         html = html_text + html_img
         return html
 
+    def save_top_image(self, img_save_path, product_id, image_url):
+        headers = {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        }
+        try:
+            response = self.request_function(image_url, headers=headers)
+            if response.status_code == 200:
+                product_folder = os.path.join(img_save_path, str(product_id))
+                os.makedirs(product_folder, exist_ok=True)
+                filename = f'1_0.jpg'
+                original_filepath = os.path.join(product_folder, filename)
+                with open(original_filepath, 'wb') as f:
+                    f.write(response.content)
+        except Exception as e:
+            logging.warning(f'{product_id}-{image_url}-图片保存本地失败({str(e)}')
+
     def add_image_watermark(
             self,
             original_image,
             watermark_image_path,
-            opacity=1,
             image_scale=0.2,
             margin=3
     ):
@@ -235,12 +272,6 @@ class BaseCrawler:
             new_height = int(base_width * wm_ratio)
             watermark = watermark.resize((base_width, new_height), Image.Resampling.LANCZOS)
 
-            # 调整透明度
-            if opacity < 1.0:
-                alpha = watermark.split()[3]
-                alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
-                watermark.putalpha(alpha)
-
             # 计算位置（右上角）
             x = original_image.width - watermark.width - margin
             y = margin
@@ -253,9 +284,9 @@ class BaseCrawler:
             watermarked = original_image.copy().convert("RGBA")
             watermarked.paste(watermark, (x, y), watermark)
 
-            # # 新增保存逻辑
+            # 新增保存逻辑
             # output_path = r'C:\Users\Administrator\Desktop\水印图片测试\watermarked_output.jpg'
-            # watermarked.convert("RGB").save(output_path, quality=100)
+            # watermarked.convert("RGB").save(output_path, quality=95)
 
             return watermarked.convert("RGB")
 
@@ -263,13 +294,24 @@ class BaseCrawler:
             logging.error(f"添加水印失败: {str(e)}", exc_info=True)
             return original_image
 
+    def find_banned_words_case_insensitive(self, banned_words_lower, text):
+        """判断 banned_word 列表里面的元素是否存在于 text"""
+        for word in banned_words_lower:
+            if word in text.lower():
+                return word
+        return None
+        # return any(word in text.lower() for word in banned_words_lower)
+
+    def split_list(self, lst, chunk_size=50):
+        return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
+
 
 if __name__ == '__main__':
     # data = {'platform': '1688', 'code': 0, 'message': '请求成功', 'data': {'product_id': '895157423598', 'specifications': 2, 'unit_weight': 0.02, 'start_amount': 1, 'title': '一加13钢化膜边胶无尘仓Reno13pro秒贴盒曲面findX8pro手机膜适用', 'main_images': ['https://cbu01.alicdn.com/img/ibank/O1CN013qBbQ91fjHw997Gce_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01s2NUiz1fjHw8BAYYi_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01g64Fsg1fjHw816Xwd_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01c1SyEx1fjHw7B9Uvb_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01yBD54N1fjHw9gGFny_!!2218330604042-0-cib.jpg'], 'skumodel': {'sku_data': {'sku_property_name': {'sku1_property_name': '颜色', 'sku2_property_name': '尺寸'}, 'sku_parameter': [{'remote_id': '895157423598_yLYeKrJ6Ro', 'name': '四边胶款无尘仓秒贴盒-高清||1+13（超声波解锁）', 'imageUrl': None, 'price': '4.50', 'stock': 949}, {'remote_id': '895157423598_mtISahSUoi', 'name': '四边胶款无尘仓秒贴盒-高清||Reno13pro', 'imageUrl': None, 'price': '4.50', 'stock': 986}, {'remote_id': '895157423598_zQUyr5KALo', 'name': '四边胶款无尘仓秒贴盒-高清||findX8pro', 'imageUrl': None, 'price': '4.50', 'stock': 987}, {'remote_id': '895157423598_jBifSo2utD', 'name': '四边胶款无尘仓秒贴盒-高清||Reno3pro/Reno4pro/Reno5pro/Reno6pro', 'imageUrl': None, 'price': '4.50', 'stock': 953}, {'remote_id': '895157423598_vR99bftp5D', 'name': '四边胶款无尘仓秒贴盒-高清||findX6pro/findX7ultra', 'imageUrl': None, 'price': '4.50', 'stock': 905}, {'remote_id': '895157423598_lIjLhLlSGB', 'name': '四边胶款无尘仓秒贴盒-高清||真我10pro+/真我13pro+', 'imageUrl': None, 'price': '4.50', 'stock': 903}, {'remote_id': '895157423598_IAJvDCOvUa', 'name': '四边胶款无尘仓秒贴盒-高清||findX3/1+ACE2/1+11/1+11R/findX5pro/1+9pro/1+10pro/', 'imageUrl': None, 'price': '4.50', 'stock': 909}]}}, 'video': 'https://cloud.video.taobao.com/play/u/2218330604042/p/2/e/6/t/1/510298916352.mp4', 'details_text_description': ['品牌:其他', '材质:钢化玻璃', '贴膜类型:前膜', '贴膜特点:高清,防爆,防尘,防指纹,防摔,全屏,秒贴盒', '颜色:四边胶款无尘仓秒贴盒-高清', '尺寸:1+13（超声波解锁）,Reno13pro,findX8pro,Reno3pro/Reno4pro/Reno5pro/Reno6pro,findX6pro/findX7ultra,真我10pro+/真我13pro+,findX3/1+ACE2/1+11/1+11R/findX5pro/1+9pro/1+10pro/', '适用机型:OPPO'], 'detailed_picture': ['https://cbu01.alicdn.com/img/ibank/O1CN013qBbQ91fjHw997Gce_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01s2NUiz1fjHw8BAYYi_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01g64Fsg1fjHw816Xwd_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01c1SyEx1fjHw7B9Uvb_!!2218330604042-0-cib.jpg', 'https://cbu01.alicdn.com/img/ibank/O1CN01ImKSBg1fjHw8d6UsT_!!2218330604042-0-cib.jpg']}}
     base = BaseCrawler()
     detail_text = ['【現貨免運】', '【公司貨】', '【嚴選好物】', '【可開發票】', '【好物優選】', '【口碑推薦】', '【銷售冠軍】', '【五星好評】', '【人氣爆款】', '【可刷卡】']
     detail_img = [
-      'https://cbu01.alicdn.com/img/ibank/O1CN01ylfX6W2G5ZDeDbCiB_!!2196368964-0-cib.jpg',
+      'http://img.pddpic.com/open-gw/2024-10-21/9ccee0c2-c9d8-4c34-b422-17754e547097.jpeg',
       'https://cbu01.alicdn.com/img/ibank/O1CN013Np2c12G5ZDQPX7LD_!!2196368964-0-cib.jpg',
       'https://cbu01.alicdn.com/img/ibank/O1CN01rQPqrW2G5ZDV2Y5m9_!!2196368964-0-cib.jpg',
       'https://cbu01.alicdn.com/img/ibank/O1CN01TNW7I92G5ZDZuCDMm_!!2196368964-0-cib.jpg',
@@ -278,7 +320,10 @@ if __name__ == '__main__':
       'https://cbu01.alicdn.com/img/ibank/O1CN011EDHTc2G5ZDUR5zsV_!!2196368964-0-cib.jpg',
       'https://cbu01.alicdn.com/img/ibank/O1CN01skcmPn2G5ZDYjO2vE_!!2196368964-0-cib.jpg'
     ]
-    image_result = base.request_function(detail_img[0])
-    original_img = Image.open(io.BytesIO(image_result.content))
-    watermark_image_path = r'C:\Users\Administrator\Desktop\水印图片测试\店铺水印\LOGO\dyqt41.png'
-    res = base.add_image_watermark(original_img, watermark_image_path)
+    # image_result = base.request_function(detail_img[0])
+    # original_img = Image.open(io.BytesIO(image_result.content))
+    # watermark_image_path = r'C:\Users\Administrator\Desktop\水印图片测试\店铺水印\LOGO\xivq18.png'
+    # res = base.add_image_watermark(original_img, watermark_image_path)
+    for i in detail_img:
+        res = base.enforce_https(i)
+        print(res)

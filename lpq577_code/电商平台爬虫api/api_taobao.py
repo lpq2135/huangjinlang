@@ -1,7 +1,7 @@
 import json
 import ast
 import random
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
+from .basic_assistanc import BaseCrawler
 
 class TaoBao(BaseCrawler):
     """此类用于处理淘宝和天猫的商品数据包"""
@@ -22,7 +22,7 @@ class TaoBao(BaseCrawler):
 
     def get_main_images(self):
         """获取商品主图"""
-        main_images = self.data['data']['item']['images']
+        main_images = [self.enforce_https(url) for url in self.data['data']['componentsVO']['headImageVO']['images'][:8]]
         return main_images
 
     def get_videos(self):
@@ -39,7 +39,7 @@ class TaoBao(BaseCrawler):
 
         # 规格为 0
         if specifications == 0:
-            return sku_price_data[0].get('price2', 'price1')
+            return sku_price_data[0].get('price2', sku_price_data[0]['price1'])
 
         # 规格为 1 或 2
         for sku in skus:

@@ -1,29 +1,29 @@
 import requests
-import mysql.connector
 import base64
 import gzip
-import daraz_api
 import json
 import 图鉴打码
-import concurrent.futures
-import time
-import 露天店铺快速上架
+import re
 
+from urllib.parse import quote_plus
+from lpq577_code.daraz相关 import daraz_api
 from flask import Flask, request
-from logging_config import logging
-from openai import OpenAI
+from logging_config import setup_logger
 from 电商平台爬虫api.api_1688 import Alibaba
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
 from ruten循环上下架 import RutenUpload
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.api_taobao import TaoBao
 from 象寄翻译 import XiangJi
 from 电商平台爬虫api.api_pinduoduo import PinDuoDuo
+from 电商平台爬虫api.api_ruten import Ruten
+from 电商平台爬虫api.basic_assistanc import BaseCrawler
+
 
 app = Flask(__name__)
 
 @app.route('/deepl/translate', methods=['post'])
 def translate_text_with_deepl():
+    """deepl翻译接口"""
     auth_key = request.values.get('auth_key')
     text = request.values.get('text')
     source_lang = request.values.get('source_lang')
@@ -45,16 +45,19 @@ def translate_text_with_deepl():
             logging.warning(f"deepl翻译请求失败，尝试第{_ + 1}次. Error: {e}")
     raise Exception("deepl翻译请求失败")
 
-@app.route('/auth/token/create', methods=['post'])
-def auth_token_create():
+@app.route('/auth_token_create_by_daraz', methods=['post'])
+def auth_token_create_by_daraz():
+    """获取daraz店铺的token"""
     code = request.values.get('code')
     upload_site = request.values.get('upload_site')
     product = daraz_api.DarazProduct(upload_site=upload_site)
     store_information = product.generate_access_token(code)
     return store_information
 
+
 @app.route('/format_alibaba', methods=['post'])
 def format_alibaba():
+    """获取1688商品重量"""
     product_id = request.values.get('product_id')
     alibaba_instance = Alibaba(product_id)
     weight = alibaba_instance.get_unit_weight()
@@ -62,6 +65,7 @@ def format_alibaba():
 
 @app.route('/handling_verification_codes', methods=['post'])
 def handling_verification_codes():
+    """利用图鉴代码处理验证码"""
     img_path = request.values.get('img_path')
     uname = request.values.get('uname')
     pwd = request.values.get('pwd')
@@ -69,62 +73,89 @@ def handling_verification_codes():
     result = 图鉴打码.base64_api(uname=uname, pwd=pwd, img=img_path, typeid=typeid)
     return result
 
-@app.route('/get_product_by_jumia', methods=['post'])
-def get_product_by_jumia():
-    url = request.values.get('url').strip()
-    proxy = request.values.get('proxy').strip()
-    proxies = {
-        'http': f'http://{proxy}',
-        'https': f'https://{proxy}',
-    }
-    headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
-    result = requests.get(url, headers, proxies=proxies)
-    return {'code': result.status_code, 'data': result.text}
+@app.route('/get_sku_price_by_ruten', methods=['post'])
+def get_sku_price_by_ruten():
+    """获取露天商品包的sku价格"""
+    product_id = request.values.get('product_id')
+    ruten_instance = Ruten(product_id)
+    product_data = ruten_instance.get_product_package()
+    if product_data['item']['soldNum'] == 0:
+        return '0'
 
-@app.route('/deepseek_chat', methods=['post'])
-def deepseek_chat():
-    api_key = request.values.get('api_key').strip()
-    model = request.values.get('model').strip()
-    content = request.values.get('content').strip()
-    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-                {"role": "user", "content": content},
-        ],
-        stream=False
-    )
-    return (response.choices[0].message.content)
+    if not product_data['item']['isActive']:
+        return '-2'
+    sku_price = {}
+    num = 0
 
-@app.route('/check_img', methods=['post'])
-def check_img():
-    ids = request.values.get('ids').strip()
-    id_list = ids.split(',')  # 将字符串拆分为列表
-    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
-        # 提交任务到线程池
-        future_to_id = {executor.submit(露天店铺快速上架.main, gn_o): gn_o for gn_o in id_list}
+    if not product_data['item']['specInfo']:
+        if 280 <= int(product_data['item']['directPrice']) <= 330:
+            sku_price[f'{num}_spec_id'] = ''
+            sku_price[f'{num}_spec_price'] = product_data['item']['directPrice']
+            return sku_price
+        return '-1'
 
-        gn_o_list = []
-        # 获取任务结果
-        count = 0
-        for future in concurrent.futures.as_completed(future_to_id):
-            gn_o = future_to_id[future]
-            res = {
-                'count': count,
-                'gn_o': gn_o,
-                'status': future.result()
-            }
-            gn_o_list.append(res)
-            count += 1
-        return gn_o_list
+    specifications = product_data['item']['specInfo']['level']
+    for key, value in product_data['item']['specInfo']['specs'].items():
+        if specifications == 2:
+            if value['parent_id'] == '0' or value['spec_status'] == 'N':
+                continue
+        if 280 <= value['spec_price'] <= 330:
+            sku_price[f'{num}_spec_id'] = value['spec_id']
+            sku_price[f'{num}_spec_price'] = value['spec_price']
+            num += 1
+    if len(sku_price) == 0:
+        return '-1'
+    return sku_price
+
+@app.route('/get_min_price_by_ruten', methods=['post'])
+def get_min_price_by_ruten():
+    """
+    产品对比竞品，计算出价格差距百分比
+    -1: 商品销量为0
+    -2: 商品已下架
+    """
+    product_id = request.values.get('product_id')
+    ruten_instance = Ruten(product_id)
+    product_data = ruten_instance.get_product_package()
+    if product_data['item']['soldNum'] == 0:
+        return {'code': -1, 'data': '商品销量为0'}
+
+    if not product_data['item']['isActive']:
+        return {'code': -2, 'data': '商品已下架'}
+
+    # 获取标题并进行编码
+    title = product_data['item']['name']
+    title = re.sub(r"【.*?】", "", title).strip()
+
+    # 获取最大价格和最小价格
+    max_price = product_data['item']['priceRange']['max']
+    min_price = product_data['item']['priceRange']['min']
+
+    #将标题进行url编码
+    keywords = quote_plus(title)
+
+    # 查找跟卖的链接ruten_instance
+    ids_data = ruten_instance.get_ids_by_reception(keywords)
+
+    # 按 PriceRange[0] 降序排列
+    sorted_data = sorted(ids_data, key=lambda x: x['PriceRange'][0], reverse=True)
+
+    for i in ids_data:
+        seller_id = i['SellerId']
+        i['PriceRange'][0]
+
+
+
+
+
+
 
 @app.route('/upload_to_ruten', methods=['post'])
 def upload_to_ruten():
-    """1688数据上架露天"""
+    """多平台露天上架集成接口"""
     platform = request.values.get('platform')
     store = request.values.get('store')
-    account = request.values.get('account')
+    sub_account = request.values.get('sub_account')
     # 根据平台获取不同的参数
     if platform == '1688' or platform == 'ruten':
         product_id = request.values.get('product_id')
@@ -165,7 +196,7 @@ def upload_to_ruten():
     if is_trans_img == 0:
         max_count = 0
     else:
-        xiangji = XiangJi(account)
+        xiangji = XiangJi(sub_account)
         if is_trans_img == 1:
             max_count = 1
         elif is_trans_img == 2:
@@ -192,13 +223,26 @@ def upload_to_ruten():
         # 创建 taobao 的实例
         taobao_instance = TaoBao(json.loads(source))
         product_data = taobao_instance.build_product_package()
+        if product_data['code'] != 0:
+            return {'code': -3, 'store': store, 'data': product_data['message']}
         product_id = product_data['data']['product_id']
 
     elif platform == 'pinduoduo':
         pinduoduo_instance = PinDuoDuo(json.loads(source))
         product_data = pinduoduo_instance.build_product_package()
+        if product_data['code'] != 0:
+            return {'code': -3, 'store': store, 'data': product_data['message']}
         product_id = product_data['data']['product_id']
 
+    logging.info(f'{product_id}-商品数据包成功解析')
+
+    # 判断类目是否可用
+    category_id_status = ruten_uplaod_instance.check_category_id(category_id)
+    if not category_id_status:
+        logging.error(f'{product_id}-{category_id}-类目id验证不可用')
+        return {'code': -2, 'store': store, 'product_id': product_id, 'data': f'{category_id}-类目id不合法(请更换)'}
+
+    logging.info(f'{product_id}-{category_id}-类目id验证可用')
     # 进行价格转换
     product_data = ruten_uplaod_instance.price_conversion(product_data, price_multi, price_add)
 
@@ -220,19 +264,28 @@ def upload_to_ruten():
     # 获取标题
     title = product_data['data']['title']
 
-    # 使用象寄翻译主图+轮播图
+    # 主图+轮播图
     main_images = product_data['data']['main_images']
+
+    # 保存首张原图
+    ruten_uplaod_instance.save_top_image(img_save_path, product_id, main_images[0])
+
+    # 使用象寄翻译主图+轮播图
     if max_count != 0:
-        main_images_data = xiangji.xiangji_image_translate_threaded(main_images, max_count)
-        if main_images_data['code'] == 0:
+        logging.info(f'{product_id}-开始进行象寄图片翻译')
+        main_images_data = xiangji.translate_images(main_images, max_count)
+        if main_images_data['status_code'] == 0:
             main_images_tw = main_images_data['data']
-        elif main_images_data['code'] == 1:
-            return {'code': 7, 'store': store, 'product_id': product_id, 'data': '象寄翻译密匙不足'}
+        elif main_images_data['status_code'] == 1:
+            return {'code': -4, 'store': store, 'product_id': product_id, 'data': '象寄翻译密匙不足'}
     else:
         main_images_tw = main_images
 
     # 获取自定义后台分类id
-    user_class_select = ruten_uplaod_instance.get_class(background_classification)
+    if background_classification == '':
+        user_class_select = 0
+    else:
+        user_class_select = ruten_uplaod_instance.get_class(background_classification)
 
     # 组装最终的上货表
     upload_product_package = {
@@ -249,7 +302,7 @@ def upload_to_ruten():
     }
 
     upload_products = ruten_uplaod_instance.upload_products(product_id, upload_product_package)
-    if upload_products['code'] == 0:
+    if upload_products['code'] == 0 or upload_products['code'] == 4:
         logging.info(f'{store}-{product_id}-上架露天成功')
         return {'code': 0, 'store': store, 'product_id': product_id, 'after_listing_id': upload_products['after_listing_id'], 'data': '上架成功'}
     return {'code': -1, 'store': store, 'product_id': product_id, 'data': '上架失败'}

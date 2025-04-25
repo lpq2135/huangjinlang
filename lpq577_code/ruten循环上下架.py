@@ -38,8 +38,8 @@ from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_compl
 
 # 记录上架成功的商品 id
 def record_product_id_listing_status(store, product_id, g_no):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f'cyclic_on_and_off_record_by_{store}'  # 构建完整的表名
         # 获取当前时间，格式化为字符串（YYYY-MM-DD HH:MM:SS）
         current_time = datetime.now().strftime('%Y-%m-%d')
@@ -58,8 +58,8 @@ def record_product_id_listing_status(store, product_id, g_no):
 
 # 记录无法上架的商品id
 def unable_to_list_id_record(store, product_id):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             """
             INSERT INTO unable_to_list_id_record (store, product_id)
@@ -80,8 +80,8 @@ def unable_to_list_id_record(store, product_id):
 
 # 记录上传失败的商品ID
 def record_upload_error(store, product_id):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             """
             INSERT INTO upload_error (store, product_id)
@@ -102,8 +102,8 @@ def record_upload_error(store, product_id):
 
 # 记录上传失败的商品ID
 def record_main_image_error(store, product_id):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             """
             INSERT INTO main_image_error (store, product_id)
@@ -124,8 +124,8 @@ def record_main_image_error(store, product_id):
 
 # 记录类目id
 def record_category_id(category_id, is_valid):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         # 使用 ON DUPLICATE KEY UPDATE 实现 "存在则更新，不存在则插入"
         cursor.execute(
             """
@@ -148,8 +148,8 @@ def record_category_id(category_id, is_valid):
 
 # 获取类目id状态
 def get_category_id_status(category_id):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             """
             SELECT is_valid FROM category_id_record WHERE category_id = %s
@@ -169,8 +169,8 @@ def get_category_id_status(category_id):
 
 # 批量修改 product_id 的状态
 def modify_product_status(store, remove_id):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f'cyclic_on_and_off_record_by_{store}'  # 构建完整的表名
         # 动态生成占位符，用于IN子句
         placeholders = ', '.join(['%s'] * len(remove_id))
@@ -189,8 +189,8 @@ def modify_product_status(store, remove_id):
 
 # 获取每日上架数量
 def get_the_daily_listing_quantity(store):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f'cyclic_on_and_off_record_by_{store}'  # 构建完整的表名
         current_time = datetime.now().strftime('%Y-%m-%d')
         query = f"SELECT COUNT(*) FROM {table_name} WHERE store = %s AND update_time = %s"
@@ -202,10 +202,24 @@ def get_the_daily_listing_quantity(store):
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
+# 获取product_id数据库状态
+def get_product_id_status(store, product_id):
+    try:
+        cnx, cursor = mysql_pool.get_conn()
+        table_name = f'cyclic_on_and_off_record_by_{store}'  # 构建完整的表名
+        query = f"SELECT COUNT(*) FROM {table_name} WHERE product_id = %s"
+        cursor.execute(query, (product_id,))
+        row_count = cursor.fetchone()
+        return row_count[0]
+    except Exception as e:
+        logging.warning("获取product_id数据库状态异常, store: %s, product_id: %s", store, product_id, str(e))
+    finally:
+        mysql_pool.close_mysql(cnx, cursor)
+
 #  获取店铺需下架的商品id
 def get_id_to_be_removed(store):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f'cyclic_on_and_off_record_by_{store}'  # 构建完整的表名
         query = f"SELECT product_id FROM {table_name} WHERE remove_status = '0' AND store = %s"
         cursor.execute(query, (store,))
@@ -221,8 +235,8 @@ def get_id_to_be_removed(store):
 
 # 获取修改标题也无法上架的id进行过滤
 def get_the_id_that_cannot_be_listed(store):
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         query = f"SELECT product_id FROM unable_to_list_id_record WHERE store = %s"
         cursor.execute(query, (store,))
         rows = cursor.fetchall()
@@ -248,10 +262,12 @@ class RutenUpload(BaseCrawler):
         self.g_pay_way = None
         self.g_deliver_way = None
         self.proxies = proxies
-        if self.get_payment_and_shipping(self.store) is False:
-            raise ValueError(f'{self.store}-在数据库找不到店铺的付款运输方式')
-        # if self.check_store_status(self.store) is False:
-        #     raise ValueError(f'{self.store}-店铺状态异常(线程终止)')
+        if self.proxies:
+            if self.get_payment_and_shipping_old(self.store) is False:
+                raise ValueError(f'{self.store}-在数据库找不到店铺的付款运输方式')
+        else:
+            if self.get_payment_and_shipping(self.store) is False:
+                raise ValueError(f'{self.store}-店铺状态异常(线程终止)')
         self.upload_count = upload_count
         self.initial_count = 0
         self.watermark_image_path = self.check_watermark_image_exists()
@@ -276,6 +292,24 @@ class RutenUpload(BaseCrawler):
 
         # 3. 如果都不存在，返回None
         return None
+
+    # 获取店铺对应的付款和运输方式
+    def get_payment_and_shipping_old(self, store):
+        try:
+            cnx, cursor = mysql_pool.get_conn()
+            cursor.execute(
+                "SELECT g_pay_way, g_deliver_way FROM payment_and_shipping_methods WHERE store = %s", (store,))
+            rows = cursor.fetchall()
+            if rows:
+                self.g_pay_way = rows[0][0]
+                self.g_deliver_way = rows[0][1]
+                return True
+            return False
+        except Exception as e:
+            logging.warning("获取店铺物流和运输方式异常: %s", str(e))
+            return False
+        finally:
+            mysql_pool.close_mysql(cnx, cursor)
 
     # 获取店铺对应的付款和运输方式
     def get_payment_and_shipping(self, store):
@@ -357,7 +391,7 @@ class RutenUpload(BaseCrawler):
                 product_folder = os.path.join(self.img_save_path, str(product_id))
                 os.makedirs(product_folder, exist_ok=True)
                 # 生成文件名：idx+1.jpg
-                filename = f"{idx + 1}.jpg"
+                filename = f'{idx + 1}_1.jpg' if idx == 0 else f'{idx + 1}.jpg'
                 original_filepath = os.path.join(product_folder, filename)
                 with open(original_filepath, 'wb') as f:
                     f.write(image_result.content)
@@ -382,7 +416,7 @@ class RutenUpload(BaseCrawler):
                     watermark_image_path=self.watermark_image_path,
                 )
                 img_io = io.BytesIO()
-                watermarked_img.save(img_io, format='JPEG', quality=100)
+                watermarked_img.save(img_io, format='JPEG', quality=95, subsampling=0, optimize=False, dpi=(300, 300))
                 img_io.seek(0)
                 files = {'image': (img_url.split('/')[-1], img_io, 'image/jpeg')}
 
@@ -453,6 +487,24 @@ class RutenUpload(BaseCrawler):
         record_category_id(category_id, '1')
         return category_id
 
+    def check_category_id(self, category_id):
+        category_id = str(category_id)
+        timestamp = int(time.time() * 1000)
+
+        # 判断类目是否为最底层:
+        get_category_url = f'https://mybid.ruten.com.tw/upload/ajax_category.php?g_class={category_id}&_={timestamp}'
+        category_response = self.request_function(get_category_url, headers=self.headers).json()
+        if category_response['is_valid'] is False:
+            return False
+
+        # 判断类目是否为管制类目:
+        regulations_url = f'https://rapi.ruten.com.tw/api/seller/v1/common/cate/{category_id}/regulations'
+        regulations_response = self.request_function(regulations_url, headers=self.headers).json()
+        if regulations_response['data']['bsmi_status'] == 1 or regulations_response['data']['ncc_status'] == 1:
+            return False
+
+        return True
+
     def get_class(self, text):
         # 获取后台自定义分类
         url1 = f'https://rapi.ruten.com.tw/api/categories/v1/{self.store}/setting/class'
@@ -469,7 +521,7 @@ class RutenUpload(BaseCrawler):
 
     # 处理标题
     def process_title(self, title):
-        title_prefix = ['【現貨免運】', '【公司貨】', '【嚴選好物】', '【可開發票】', '【好物優選】', '【口碑推薦】', '【銷售冠軍】', '【五星好評】', '【人氣爆款】', '【可刷卡】']
+        # title_prefix = ['【現貨免運】', '【公司貨】', '【嚴選好物】', '【可開發票】', '【好物優選】', '【口碑推薦】', '【銷售冠軍】', '【五星好評】', '【人氣爆款】', '【可刷卡】']
         if '【' and '】' in title:
             return title
         if len(title) <= 54:
@@ -494,29 +546,36 @@ class RutenUpload(BaseCrawler):
             "seven_way": "seven_both",
             "mbox_0": product_id
         }
-        response = self.request_function(url, 'post', headers=self.headers, data=data)
-        if response:
-            try:
-                tree = html.fromstring(response.text)
-                # 获取表单数据
-                data = {
-                    'g_single_no': '',
-                    'g_single_class': '',
-                    'time_key': '',
-                    'g_no_0': product_id,
-                    f'hash_{product_id}': tree.xpath('//input[@id="g_hash0"]/@value')[0],
-                    f'g_mode_{product_id}': tree.xpath('//input[@id="g_mode0"]/@value')[0],
-                    f'g_sold_num_{product_id}': tree.xpath('//input[@id="g_sold_num0"]/@value')[0],
-                    f'g_ori_price{product_id}': tree.xpath('//input[@id="g_ori_price0"]/@value')[0],
-                    f'g_class_{product_id}': tree.xpath('//input[@id="g_class0"]/@value')[0],
-                    f'g_name_{product_id}': tree.xpath('//input[@id="g_name0"]/@value')[0],
-                    f'user_class_select_{product_id}': tree.xpath('//option[@selected]/@value')[0],
-                    f'g_num_{product_id}': tree.xpath('//input[@id="g_num0"]/@value')[0],
-                    f'g_direct_price2_{product_id}': tree.xpath('//input[@id="g_direct_priceB0"]/@value')[0]
-                }
-                return data
-            except Exception as e:
-                logging.warning(f'{self.store}-{product_id}-获取后台自定义分类失败, 错误信息: {e}')
+        for num in range(6):
+            response = self.request_function(url, 'post', headers=self.headers, data=data)
+            if response.status_code == 400:
+                continue
+            if response.status_code == 200:
+                try:
+                    tree = html.fromstring(response.text)
+                    try:
+                        user_class_select = tree.xpath('//option[@selected]/@value')[0]
+                    except IndexError:
+                        user_class_select = '0'
+                    # 获取表单数据
+                    data = {
+                        'g_single_no': '',
+                        'g_single_class': '',
+                        'time_key': '',
+                        'g_no_0': product_id,
+                        f'hash_{product_id}': tree.xpath('//input[@id="g_hash0"]/@value')[0],
+                        f'g_mode_{product_id}': tree.xpath('//input[@id="g_mode0"]/@value')[0],
+                        f'g_sold_num_{product_id}': tree.xpath('//input[@id="g_sold_num0"]/@value')[0],
+                        f'g_ori_price{product_id}': tree.xpath('//input[@id="g_ori_price0"]/@value')[0],
+                        f'g_class_{product_id}': tree.xpath('//input[@id="g_class0"]/@value')[0],
+                        f'g_name_{product_id}': tree.xpath('//input[@id="g_name0"]/@value')[0],
+                        f'user_class_select_{product_id}': user_class_select,
+                        f'g_num_{product_id}': tree.xpath('//input[@id="g_num0"]/@value')[0],
+                        f'g_direct_price2_{product_id}': tree.xpath('//input[@id="g_direct_priceB0"]/@value')[0]
+                    }
+                    return data
+                except Exception as e:
+                    logging.warning(f'{self.store}-{product_id}-获取后台自定义分类失败, 错误信息: {e}')
         return None
 
     # 构造multipart/form-data格式
@@ -542,12 +601,12 @@ class RutenUpload(BaseCrawler):
         for key, value in specs.items():
             if 'spec_price' not in value:
                 continue
-            if value['spec_status'] == 'N':
-                continue
             item_detail_dict[f'item_detail_price_{num}'] = value['spec_price']
             item_detail_dict[f'item_detail_count_{num}'] = value['spec_num']
             item_detail_dict[f'item_detail_note_{num}'] = ''
             num += 1
+            if value['spec_status'] == 'N':
+                continue
             show_num += value['spec_num']
         return item_detail_dict, show_num
 
@@ -557,8 +616,69 @@ class RutenUpload(BaseCrawler):
         headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
         }
-        result = self.request_function(url, headers=headers).json()
-        return result['data'][0]['available']
+        try:
+            result = self.request_function(url, headers=headers).json()
+            return result['data'][0]['available']
+        except Exception as e:
+            logging.warning(f'{self.store}-{product_id}-请求商品V2接口失败(更换产品接口)-{e}')
+            result2 = self.get_product_package(product_id)
+            return not result2['item']['isSoldEnd']
+
+    def get_product_package(self, product_id):
+        """获取商品数据包"""
+        url = f'https://www.ruten.com.tw/item/show?{product_id}'
+        cookies = {
+            "_cfuvid": "_CH_Nx_bYg9Q3tPA42nSf0rzNshiFWV63ofzzsw7_QQ-1740457574750-0.0.1.1-604800000",
+            "x-hng": "lang=zh-CN&domain=www.ruten.com.tw",
+            "_ga": "GA1.1.925149236.1740457572",
+            "_ts_id": "20250225200792387309.1740457576",
+            "_fbp": "fb.2.1740457572410.613730098481646494",
+            "_clck": "1mztmfc%7C2%7Cftt%7C0%7C1882",
+            "_clsk": "1xvygqj%7C1740729396184%7C4%7C0%7Cn.clarity.ms%2Fcollect",
+            "_ts_session": "rtk8anlsmz",
+            "adultchk": "ok",
+            "_ga_2VP4WXLL56": "GS1.1.1740738889.14.1.1740738902.47.0.0",
+            "_ts_session_spent": "23762",
+        }
+        cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+        headers = {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'cookie': cookie_str
+            }
+        response = self.request_function(url, headers=headers, proxies=self.proxies)
+        match = re.search(r'(?<=RT\.context\ =\ ).*(?=;)', response.text)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except Exception as e:
+                logging.warning(f'{self.store}-{product_id}-获取商品数据包失败, 错误信息: {e}')
+
+    # 检查标题是否修改成功
+    def title_check(self, product_id, title):
+        url = f'https://rapi.ruten.com.tw/api/items/v2/list?gno={product_id}&level=simple'
+        headers = {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+        }
+        try:
+            result1 = self.request_function(url, headers=headers).json()
+            gno_name = result1['data'][0]['name']
+            if gno_name == title:
+                return True
+            else:
+                time.sleep(12)
+                result2 = self.get_product_package(product_id)
+                gno_name = result2['item']['name']
+                if gno_name == title:
+                    return True
+                return False
+        except Exception as e:
+            time.sleep(12)
+            logging.warning(f'{self.store}-{product_id}-请求商品V2接口失败(更换产品接口)-{e}')
+            result2 = self.get_product_package(product_id)
+            gno_name = result2['item']['name']
+            if gno_name == title:
+                return True
+            return False
 
     # 下架产品总流程
     def remove_products(self, remove_list):
@@ -616,14 +736,14 @@ class RutenUpload(BaseCrawler):
             return {'code': 3}
 
     # 修改标题重新上架(大量修改入口)
-    def modify_title_to_upload(self, g_no, title):
+    def modify_title_to_upload(self, product_id, g_no, title):
         data = self.process_user_class(g_no)
         data[f'g_name_{g_no}'] = title
         url1 = 'https://mybid.ruten.com.tw/master/action_sellnow_modify_deal.php'
         response1 = self.request_function(url1, 'post', headers=self.headers, data=data, proxies=self.proxies)
         time.sleep(2)
         if 'filter_msg' in response1.url:
-            logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架")
+            logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架(原始id-{product_id})")
             return {'code': 4}
         elif response1.status_code == 200:
             pattern = r"time_key=(\d+)&hash2=([a-fA-F0-9]+)"
@@ -634,16 +754,20 @@ class RutenUpload(BaseCrawler):
                 url2 = f'https://mybid.ruten.com.tw/master/action_sellnow_modify_update.php?time_key={time_key}&hash2={hash2}'
                 response2 = self.request_function(url2, headers=self.headers, proxies=self.proxies)
                 if '1件商品修改成功！' in response2.text:
-                    logging.info(f"{self.store}-{g_no}-标题更新成功")
-                    return {'code': 0}
-            logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架")
+                    title_check = self.title_check(g_no, title)
+                    if title_check:
+                        logging.info(f"{self.store}-{g_no}-标题更新成功(原始id-{product_id})")
+                        return {'code': 0}
+                    logging.info(f"{self.store}-{g_no}-标题更新失败(原始id-{product_id})")
+                    return {'code': 4}
+            logging.warning(f"{self.store}-{g_no}-无法通过修改标题的方式上架(原始id-{product_id})")
             return {'code': 4}
 
     def price_conversion(self, data, price_multi, price_add):
         """把本地价格转换成上架的价格"""
         specifications = data['data']['specifications']
         if specifications == 0:
-            data['data']['skumodel']['price'] = int(float(data['data']['skumodel']['price']) * float(price_multi) + float(price_add))
+            data['data']['skumodel']['sku_data']['price'] = int(float(data['data']['skumodel']['sku_data']['price']) * float(price_multi) + float(price_add))
         else:
             for i in data['data']['skumodel']['sku_data']['sku_parameter']:
                 i['price'] = int(float(i['price']) * float(price_multi) + float(price_add))
@@ -658,7 +782,8 @@ class RutenUpload(BaseCrawler):
             item_detail_dict, show_num = self.process_item_detail(spec_info['specs'])
         # 规格等于 0
         else:
-            show_num = product_data['data']['skumodel']['sku_data']['stock']
+            stock = int(product_data['data']['skumodel']['sku_data']['stock'])
+            show_num = stock if 150 <= stock <= 999 else 499
             g_direct_price = product_data['data']['skumodel']['sku_data']['price']
             # 无规格 item_detail 参数
             item_detail_dict = {
@@ -678,14 +803,21 @@ class RutenUpload(BaseCrawler):
 
     def cycle_on_and_off_shelves(self, product_id):
         # 判断上品的状态（前置条件）
+        product_id_mysql_count = get_product_id_status(self.store, product_id)
+        if product_id_mysql_count != 0:
+            return {'code': 1, 'status': False, 'product_id': product_id}
+
         product_status = self.product_items_v2(product_id)
         if not product_status:
             logging.warning(f'{self.store}-{product_id}-此商品已下架无需重新采集上架')
             return {'code': 1, 'status': False, 'product_id': product_id}
 
         # 创建实例获取商品数据包
-        ruten_product = Ruten(product_id)
+        ruten_product = Ruten(product_id, proxies=self.proxies)
         product_data = ruten_product.build_product_package()
+
+        if product_data['code'] == 3:
+            return {'code': 'upload_3', 'status': False, 'product_id': product_id}
 
         # 获取规格数
         specifications = product_data['data']['specifications']
@@ -735,14 +867,14 @@ class RutenUpload(BaseCrawler):
 
         # 商品详情
         html_old = product_data['data']['details_text_description']
-        if '本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服' in html_old:
+        if '本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服' in html_old or account != 'huangjinlang':
             html_new = html_old
         else:
             html_add = """<p><span style="font-size: 24pt; background-color: #ff0000;"><strong><span style="color: #000000;">溫馨提示：</span></strong></span></p>
                                 <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">1️⃣本店所屬</span></strong></span><span style="background-color: #ccffff;"><span style="color: #800000;" color="#800000"><span style="font-size: 18.6667px;"><b></b></span></span></span><strong style="color: #800000; font-size: 14pt;"><span style="background-color: #ccffff;">公司長期運營，品質第一，售後無憂！</span></strong></p>
                                 <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">2️⃣本店支持開發票及信用卡支付，若需要使用信用卡付款請聯絡客服！</span></strong></span></p>
                                 <p><span style="color: #800000; font-size: 14pt;"><strong><span style="background-color: #ccffff;">3️⃣支持大量採購，支持全網比價，可帶圖帶產品詢價，歡迎與您長期合作！</span></strong></span></p>"""
-            html_new = html_add + '<br>' + product_data['data']['details_text_description']
+            html_new = html_add + '<br>' + html_old
 
         upload_product_package = {
             'specifications': specifications,
@@ -763,7 +895,7 @@ class RutenUpload(BaseCrawler):
                 # 成功计数
                 self.upload_count += 1
                 self.initial_count += 1
-                logging.info(f'{self.store}-当日商品已上传成功{self.upload_count}-本轮商品已成功上传{self.initial_count}')
+            logging.info(f'{self.store}-当日商品已上传成功{self.upload_count}-本轮商品已成功上传{self.initial_count}')
             record_product_id_listing_status(self.store, product_id, g_no)
             return {'code': 'upload_0', 'status': True, 'product_id': product_id}
         if upload_products['code'] == 1:
@@ -775,7 +907,7 @@ class RutenUpload(BaseCrawler):
         elif upload_products['code'] == 4:
             unable_to_list_id_record(self.store, product_id)
             record_product_id_listing_status(self.store, g_no, g_no)
-            return {'code': 'upload_4', 'status': False, 'product_id': product_id, 'after_listing_id': upload_products['after_listing_id']}
+            return {'code': 'upload_4', 'status': False, 'product_id': product_id, 'after_listing_id': g_no}
         elif upload_products['code'] == 5:
             return {'code': 'upload_5', 'status': False, 'product_id': product_id}
 
@@ -816,7 +948,7 @@ class RutenUpload(BaseCrawler):
         logging.info(f'{self.store}-{product_id}-主图上传成功')
 
         # 标题
-        title = upload_product_package['title']
+        title = upload_product_package['title'][:60]
 
         # 处理最终的上架数据包
         data_dict = {
@@ -868,7 +1000,7 @@ class RutenUpload(BaseCrawler):
             response_action_url = response_action.url
             if 'filter_msg' in response_action_url:
                 logging.warning(f'{self.store}-{product_id}-此商品无法上架露天(尝试修改标题的方式上架)')
-                data_dict['g_name'] = f'huangjinlang_{product_id}'
+                data_dict['g_name'] = f'huangjinlang_{self.generate_random_string()}'
                 modify_title_mark = True
                 continue
             elif 'item_preview' in response_action_url:
@@ -893,9 +1025,9 @@ class RutenUpload(BaseCrawler):
             parsed_url = urlparse(response_finalize_url)
             query_params = parse_qs(parsed_url.query)
             g_no = query_params.get('g_no', [None])[0]
-            # 记录数据库
+            # 修改标题
             if modify_title_mark:
-                filter_data = self.modify_title_to_upload(g_no, title)
+                filter_data = self.modify_title_to_upload(product_id, g_no, title)
                 if filter_data['code'] != 0:
                     return {'code': 4, 'status': False, 'product_id': product_id, 'after_listing_id': g_no}
             logging.info(f"{self.store}-{product_id}-{ {'after_listing_id': g_no, 'status': True, 'data': '上架成功'} }")
@@ -905,113 +1037,122 @@ class RutenUpload(BaseCrawler):
 
 # 创建店铺处理函数
 def process_store(row):
-    # 解析数据
-    store = row[0]  # 店铺名
-    number_of_spaces_in_title = int(row[1])  # 需重新上架 标题空格数
-    maximum_bids = int(row[2])  # 需重新上架 最大出价数
-    maximum_views = int(row[3])  # 需重新上架 最大点阅数
-    maximum_traces = int(row[4])  # 需重新上架 最大追踪数
-    min_price = int(row[5])  # 需重新上架 最小价格
-    max_price = int(row[6])  # 需重新上架 最大价格
-    time_interval_for_loading = row[7]  # 禁止上货时间区间（整点）
-    quantity_limit_per_round = int(row[8])  # 每一轮数据处理量
+    try:
+        # 解析数据
+        store = row[0]  # 店铺名
+        number_of_spaces_in_title = int(row[1])  # 需重新上架 标题空格数
+        maximum_bids = int(row[2])  # 需重新上架 最大出价数
+        maximum_views = int(row[3])  # 需重新上架 最大点阅数
+        maximum_traces = int(row[4])  # 需重新上架 最大追踪数
+        min_price = int(row[5])  # 需重新上架 最小价格
+        max_price = int(row[6])  # 需重新上架 最大价格
+        time_interval_for_loading = row[7]  # 禁止上货时间区间（整点）
+        quantity_limit_per_round = int(row[8])  # 每一轮数据处理量
+        max_number_of_listings_per_day = int(row[9])  # 每日最大上架数
 
-    # 获取当前上货数量
-    upload_count = get_the_daily_listing_quantity(store)
-    logging.info(f'{store}-当日商品已上传{upload_count}')
+        # 获取当前上货数量
+        upload_count = get_the_daily_listing_quantity(store)
+        if upload_count >= max_number_of_listings_per_day:
+            return
+        logging.info(f'{store}-当日商品已上传{upload_count}')
 
-    # 创建 Ruten 实例
-    ruten_instance = RutenUpload(store, upload_count, proxies=proxies)
+        # 创建 Ruten 实例
+        ruten_instance = RutenUpload(store, upload_count, proxies=proxies)
 
-    # 检查店铺状态是否正常
-    store_status = ruten_instance.check_store_status(store)
-    if not store_status:
-        return
+        # 检查店铺状态是否正常
+        store_status = ruten_instance.check_store_status(store)
+        if not store_status:
+            return
 
-    # 开始检查是否有需要下架的商品id
-    remove_list = get_id_to_be_removed(store)
-    if remove_list:
-        remove_list_new = ruten_instance.split_list(remove_list)
-        for sublist in remove_list_new:
-            ruten_instance.remove_products(sublist)
-        logging.info(f'{store}-需要下架id处理完成')
-    logging.info(f'{store}-无需处理下架id')
+        # 开始检查是否有需要下架的商品id
+        remove_list = get_id_to_be_removed(store)
+        if remove_list:
+            remove_list_new = ruten_instance.split_list(remove_list)
+            for sublist in remove_list_new:
+                ruten_instance.remove_products(sublist)
+            logging.info(f'{store}-需要下架id处理完成')
+        logging.info(f'{store}-无需处理下架id')
 
-    # 获取无法上架的ID置于列表
-    unable_to_list = get_the_id_that_cannot_be_listed(store)
+        # 获取无法上架的ID置于列表
+        unable_to_list = get_the_id_that_cannot_be_listed(store)
 
-    # 启动参数
-    page_num = 200  # 初始页数
-    while True:
-        # 判断当前时间是否符合启动条件
+        # 启动参数
+        page_num = 200  # 初始页数
         while True:
-            current_hour = datetime.now().hour
-            start_hour, end_hour = map(int, time_interval_for_loading.split('-'))
-            if start_hour <= current_hour < end_hour:
-                logging.info(f'{store}-当前时间不符合启动条件, 休眠300s')
-                time.sleep(300)
-            else:
-                break
-
-        remove_list = []  # 下架列表
-        logging.info(f'{store}-当前页数第{page_num}页')
-        product_id_lsit = ruten_instance.get_pagination_product_id(page_num)  # 获取分页链接的商品数据
-        with concurrent.futures.ThreadPoolExecutor(max_workers=store_workers) as executor:
-            futures = []
-            for product_data in product_id_lsit:
-                product_id = str(product_data['product_id'])
-                # 如果商品id在不可上架的id列表中，跳过
-                if product_id in unable_to_list:
-                    continue
-
-                # 判断此轮的上架成功个数
-                if ruten_instance.initial_count >= quantity_limit_per_round:
-                    return
-
-                # 处理标题空格数
-                title = product_data['title']
-                while '  ' in title:
-                    title = title.replace('  ', ' ')
-
-                # 判断标题空格数
-                if title.count(' ') <= number_of_spaces_in_title and int(product_data['sales']) <= maximum_bids:
-                    # 判断商品价格最小值、最大值、出价数、点阅数、追踪数
-                    if (int(product_data['min_price']) < min_price and int(product_data['max_price']) > 1000) or (
-                            min_price <= int(product_data['min_price']) <= max_price):
-                        if int(product_data['click']) <= maximum_views and int(product_data['cart']) <= maximum_traces:
-                            # 满足条件，提交任务到线程池
-                            futures.append(executor.submit(ruten_instance.cycle_on_and_off_shelves, product_id))
-                        else:
-                            logging.info(f"{store}-{product_id}-不做循环上下架处理(点阅数/追踪数)")
-                    else:
-                        logging.info(f"{store}-{product_id}-进行下架处理(价格)")
-                        remove_list.append(product_id)
+            # 判断当前时间是否符合启动条件
+            while True:
+                current_hour = datetime.now().hour
+                start_hour, end_hour = map(int, time_interval_for_loading.split('-'))
+                if start_hour <= current_hour < end_hour:
+                    logging.info(f'{store}-当前时间不符合启动条件, 休眠300s')
+                    time.sleep(300)
                 else:
-                    logging.info(f"{store}-{product_id}-不做循环上下架处理(标题空格数/销量)")
+                    break
 
-            # 等待所有提交到线程池的任务完成
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    upload_data = future.result()
-                    if upload_data['code'] == 'upload_1':
+            remove_list = []  # 下架列表
+            logging.info(f'{store}-当前页数第{page_num}页')
+            product_id_list = ruten_instance.get_pagination_product_id(page_num)  # 获取分页链接的商品数据
+            if not product_id_list:
+                return
+            with concurrent.futures.ThreadPoolExecutor(max_workers=store_workers) as executor:
+                futures = []
+                for product_data in product_id_list:
+                    product_id = str(product_data['product_id'])
+                    # 如果商品id在不可上架的id列表中，跳过
+                    if product_id in unable_to_list:
                         continue
-                    elif upload_data['code'] == 'upload_0':
-                        remove_list.append(upload_data['product_id'])
-                    elif upload_data['code'] == 'upload_4':
-                        remove_list.append(upload_data['after_listing_id'])
-                    elif upload_data['code'] == 'upload_3':
-                        remove_list.append(upload_data['product_id'])
-                    elif upload_data['code'] == 'upload_5':
+
+                    # 判断此轮的上架成功个数
+                    if ruten_instance.initial_count >= quantity_limit_per_round:
                         return
-                except Exception:
-                    logging.exception(f'{store}-上货发生错误: {e}')
-                    record_upload_error(store, upload_data['product_id'])
 
-            if remove_list:
-                ruten_instance.remove_products(remove_list)
+                    # 处理标题空格数
+                    title = product_data['title']
+                    while '  ' in title:
+                        title = title.replace('  ', ' ')
 
-            # 设置页数
-            page_num = 200 if page_num == 1 else page_num - 1
+                    # 判断标题空格数
+                    if title.count(' ') <= number_of_spaces_in_title and int(product_data['sales']) <= maximum_bids:
+                        # 判断商品价格最小值、最大值、出价数、点阅数、追踪数
+                        if (int(product_data['min_price']) < min_price and int(product_data['max_price']) > 1000) or (
+                                min_price <= int(product_data['min_price']) <= max_price):
+                            if int(product_data['click']) <= maximum_views and int(product_data['cart']) <= maximum_traces:
+                                # 满足条件，提交任务到线程池
+                                futures.append(executor.submit(ruten_instance.cycle_on_and_off_shelves, product_id))
+                            else:
+                                logging.info(f"{store}-{product_id}-不做循环上下架处理(点阅数/追踪数)")
+                        else:
+                            logging.info(f"{store}-{product_id}-进行下架处理(价格)")
+                            remove_list.append(product_id)
+                    else:
+                        logging.info(f"{store}-{product_id}-不做循环上下架处理(标题空格数/销量)")
+
+                # 等待所有提交到线程池的任务完成
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        upload_data = future.result()
+                        if upload_data['code'] == 'upload_1':
+                            continue
+                        elif upload_data['code'] == 'upload_0':
+                            remove_list.append(upload_data['product_id'])
+                        elif upload_data['code'] == 'upload_4':
+                            remove_list.append(upload_data['after_listing_id'])
+                        elif upload_data['code'] == 'upload_3':
+                            remove_list.append(upload_data['product_id'])
+                        elif upload_data['code'] == 'upload_5':
+                            return
+                    except Exception as e:
+                        logging.exception(f"{store}-任务处理异常: {str(e)}")
+                        continue
+
+                if remove_list:
+                    ruten_instance.remove_products(remove_list)
+
+                # 设置页数
+                page_num = 200 if page_num == 1 else page_num - 1
+
+    except Exception as e:
+        logging.exception(f"{store}-任务处理异常: {str(e)}")
 
 
 if __name__ == '__main__':
@@ -1035,6 +1176,12 @@ if __name__ == '__main__':
         proxies = {
             'http': 'http://brd-customer-hl_8240a7b6-zone-ruten_remove:g4w5c685daes@brd.superproxy.io:33335',
             'https': 'https://brd-customer-hl_8240a7b6-zone-ruten_remove:g4w5c685daes@brd.superproxy.io:33335',
+        }
+    elif account == 'yihe':
+        mysql_pool = MySqlPool(host='rm-gw894lxac3o2j055k0o.mysql.germany.rds.aliyuncs.com', password='Wait0you', user='yihe', database='ruten_yihe')
+        proxies = {
+            'http': 'http://brd-customer-hl_34914aa7-zone-datacenter_proxy2:85olh0om37b9@brd.superproxy.io:33335',
+            'https': 'https://brd-customer-hl_34914aa7-zone-datacenter_proxy2:85olh0om37b9@brd.superproxy.io:33335',
         }
     else:
         # 异常退出，状态码为 1
@@ -1064,7 +1211,7 @@ if __name__ == '__main__':
 
     # 最大线程数
     max_workers = len(rows_list)
-    logging.info(f'当前执行线程{max_workers}')
+    logging.info(f'当前店铺执行线程{max_workers}')
 
     # 创建主线程池
     main_pool = ThreadPoolExecutor(max_workers=max_workers)

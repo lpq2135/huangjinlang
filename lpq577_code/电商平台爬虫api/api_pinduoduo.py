@@ -22,12 +22,12 @@ class PinDuoDuo(BaseCrawler):
 
     def get_main_images(self):
         """获取商品主图"""
-        main_images = self.data['store']['initDataObj']['goods']['viewImageData']
+        main_images = self.data['store']['initDataObj']['goods']['viewImageData'][:8]
         return main_images
 
     def get_videos(self):
         """获取商品视频"""
-        if 'url' in self.data['store']['initDataObj']['goods']['videoGallery'][0]:
+        if 'url' in self.data['store']['initDataObj']['goods']['videoGallery']:
             video = self.data['store']['initDataObj']['goods']['videoGallery'][0]['url']
             return video
         return None
