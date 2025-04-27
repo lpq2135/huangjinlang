@@ -4,7 +4,9 @@ import gzip
 import json
 import 图鉴打码
 import re
+import math
 
+from opencc import OpenCC
 from urllib.parse import quote_plus
 from lpq577_code.daraz相关 import daraz_api
 from flask import Flask, request
@@ -111,42 +113,67 @@ def get_sku_price_by_ruten():
 def get_min_price_by_ruten():
     """
     产品对比竞品，计算出价格差距百分比
+    0: 成功获取价格差值百分比
     -1: 商品销量为0
     -2: 商品已下架
+    -3: 在有销量的产品已是最低价格
+    -4: 标题一致但是sku参数不一致
     """
+
+    # 获取需要过滤的sellerid
+    with open(r'D:\露天精细化运营工具\其他辅助工具\露天全网比价程序\附件库\seller_id.txt', 'r', encoding='utf-8') as f:
+        seller_id_total = [line.strip() for line in f]
+
+    # 创建翻译实例
+    converter = OpenCC('s2tw')
+
     product_id = request.values.get('product_id')
     ruten_instance = Ruten(product_id)
-    product_data = ruten_instance.get_product_package()
+    product_data = ruten_instance.get_product_package(product_id)
     if product_data['item']['soldNum'] == 0:
         return {'code': -1, 'data': '商品销量为0'}
 
     if not product_data['item']['isActive']:
         return {'code': -2, 'data': '商品已下架'}
 
+    # 获取规格数
+    if not product_data['item']['specInfo']:
+        specifications = 0
+    else:
+        specifications = product_data['item']['specInfo']['level']
+
     # 获取标题并进行编码
     title = product_data['item']['name']
     title = re.sub(r"【.*?】", "", title).strip()
 
     # 获取最大价格和最小价格
-    max_price = product_data['item']['priceRange']['max']
     min_price = product_data['item']['priceRange']['min']
 
-    #将标题进行url编码
+    # 将标题进行url编码
     keywords = quote_plus(title)
 
     # 查找跟卖的链接ruten_instance
     ids_data = ruten_instance.get_ids_by_reception(keywords)
 
+    # 先过滤掉不符合条件的字典
+    filtered_data = [item for item in ids_data if title in item['ProdName'] and item['SoldQty'] != 0]
+
     # 按 PriceRange[0] 降序排列
-    sorted_data = sorted(ids_data, key=lambda x: x['PriceRange'][0], reverse=True)
+    sorted_data = sorted(filtered_data, key=lambda x: x['PriceRange'][0])
 
-    for i in ids_data:
+    # 开始遍历处理数据
+    for i in sorted_data:
         seller_id = i['SellerId']
-        i['PriceRange'][0]
-
-
-
-
+        if seller_id in seller_id_total:
+            return {'code': -3, 'data': '在有销量的产品已是最低价格'}
+        if specifications != 0:
+            contrast_data = ruten_instance.get_product_package(i['ProdId'])
+            if converter.convert(next(iter(product_data['item']['specMap']['spec']))) != converter.convert(next(iter(contrast_data['item']['specMap']['spec']))):
+                return {'code': -4, 'data': '标题一致但是sku参数不一致'}
+        # 计算价格最小值的差值百分比
+        contrast_price = i['PriceRange'][0]
+        result = 100 - math.floor(contrast_price / min_price * 100)
+        return {'code': -3, 'data': result}
 
 
 

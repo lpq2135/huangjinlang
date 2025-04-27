@@ -10,12 +10,12 @@ class Ruten(BaseCrawler):
     def __init__(self, product_id, proxies=None):
         self.proxies = proxies
         self.product_id = product_id
-        self.product_data = self.get_product_package()
+        self.product_data = self.get_product_package(self.product_id)
         self.headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
 
-    def get_product_package(self):
+    def get_product_package(self, product_id):
         """获取商品数据包"""
-        url = f'https://www.ruten.com.tw/item/show?{self.product_id}'
+        url = f'https://www.ruten.com.tw/item/show?{product_id}'
         cookies = {
             "_cfuvid": "_CH_Nx_bYg9Q3tPA42nSf0rzNshiFWV63ofzzsw7_QQ-1740457574750-0.0.1.1-604800000",
             "x-hng": "lang=zh-CN&domain=www.ruten.com.tw",
