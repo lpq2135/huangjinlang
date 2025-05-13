@@ -5,22 +5,24 @@ import json
 import 图鉴打码
 import re
 import math
+import logging
+from logging_config import setup_logger
 
 from opencc import OpenCC
 from urllib.parse import quote_plus
-from lpq577_code.daraz相关 import daraz_api
 from flask import Flask, request
-from logging_config import setup_logger
 from 电商平台爬虫api.api_1688 import Alibaba
 from ruten循环上下架 import RutenUpload
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.api_taobao import TaoBao
 from 象寄翻译 import XiangJi
 from 电商平台爬虫api.api_pinduoduo import PinDuoDuo
-from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.basic_assistanc import BaseCrawler
 
+# 在创建Flask应用前设置日志
+setup_logger()
 
+# 然后创建Flask应用
 app = Flask(__name__)
 
 @app.route('/deepl/translate', methods=['post'])
@@ -80,7 +82,7 @@ def get_sku_price_by_ruten():
     """获取露天商品包的sku价格"""
     product_id = request.values.get('product_id')
     ruten_instance = Ruten(product_id)
-    product_data = ruten_instance.get_product_package()
+    product_data = ruten_instance.get_product_package(product_id)
     if product_data['item']['soldNum'] == 0:
         return '0'
 
@@ -116,20 +118,26 @@ def get_min_price_by_ruten():
     0: 成功获取价格差值百分比
     -1: 商品销量为0
     -2: 商品已下架
-    -3: 在有销量的产品已是最低价格
+    -3: 商品已是最低价格
     -4: 标题一致但是sku参数不一致
+    -5: 找不到相关产品
     """
 
     # 获取需要过滤的sellerid
-    with open(r'D:\露天精细化运营工具\其他辅助工具\露天全网比价程序\附件库\seller_id.txt', 'r', encoding='utf-8') as f:
+    with open(r'D:\露天精细化运营工具\其他辅助工具\露天全网比价程序\计算折扣百分比\附件库\seller_id.txt', 'r', encoding='utf-8') as f:
         seller_id_total = [line.strip() for line in f]
 
     # 创建翻译实例
     converter = OpenCC('s2tw')
 
     product_id = request.values.get('product_id')
+    lower_limit_percentage = int(request.values.get('lower_limit_percentage'))
+    fixed_value = int(request.values.get('fixed_value'))
+
+    # 创建 ruten_instance 实例
     ruten_instance = Ruten(product_id)
     product_data = ruten_instance.get_product_package(product_id)
+
     if product_data['item']['soldNum'] == 0:
         return {'code': -1, 'data': '商品销量为0'}
 
@@ -144,38 +152,64 @@ def get_min_price_by_ruten():
 
     # 获取标题并进行编码
     title = product_data['item']['name']
-    title = re.sub(r"【.*?】", "", title).strip()
+    title = (re.sub(r"【.*?】", "", title).strip().replace('台灣現貨', '')).replace('台灣出貨', '')
+
+    # 处理title末尾的数字和字母
+    pattern = r'[a-zA-Z0-9]+$'
+    title1 = re.sub(pattern, '', title[:30]).strip()
+
+    # 将标题进行url编码
+    keywords = quote_plus(title1)
 
     # 获取最大价格和最小价格
     min_price = product_data['item']['priceRange']['min']
-
-    # 将标题进行url编码
-    keywords = quote_plus(title)
 
     # 查找跟卖的链接ruten_instance
     ids_data = ruten_instance.get_ids_by_reception(keywords)
 
     # 先过滤掉不符合条件的字典
-    filtered_data = [item for item in ids_data if title in item['ProdName'] and item['SoldQty'] != 0]
+    filtered_data = [item for item in ids_data if title in item['ProdName']]
+
+    if len(filtered_data) == 0:
+        return {'code': -5, 'data': '找不到相关产品'}
 
     # 按 PriceRange[0] 降序排列
-    sorted_data = sorted(filtered_data, key=lambda x: x['PriceRange'][0])
+    sorted_data = sorted(filtered_data, key=lambda x: int(x['PriceRange'][0]))
 
     # 开始遍历处理数据
     for i in sorted_data:
         seller_id = i['SellerId']
+
+        # 判断是否为团队内的店铺
         if seller_id in seller_id_total:
-            return {'code': -3, 'data': '在有销量的产品已是最低价格'}
+            return {'code': -3, 'data': '商品已是最低价格'}
+
+        # sku不为0的情况处理
         if specifications != 0:
+            # 对比两个商品是否完全一致
             contrast_data = ruten_instance.get_product_package(i['ProdId'])
+            if not contrast_data['item']['specInfo']:
+                continue
             if converter.convert(next(iter(product_data['item']['specMap']['spec']))) != converter.convert(next(iter(contrast_data['item']['specMap']['spec']))):
-                return {'code': -4, 'data': '标题一致但是sku参数不一致'}
+                continue
+
         # 计算价格最小值的差值百分比
         contrast_price = i['PriceRange'][0]
-        result = 100 - math.floor(contrast_price / min_price * 100)
-        return {'code': -3, 'data': result}
+        result = 100 - math.floor(int(contrast_price) / int(min_price) * 100)
 
+        if result == 0:
+            return {'code': -3, 'data': '商品已是最低价格'}
 
+        if result >= 85:
+            continue
+
+        # 如果折扣幅度超过 lower_limit_percentage，则定折扣幅度为 fixed_value
+        if result > lower_limit_percentage:
+            result = fixed_value
+        else:
+            result += 1
+        return {'code': 0, 'data': result}
+    return {'code': -5, 'data': '找不到相关产品'}
 
 @app.route('/upload_to_ruten', methods=['post'])
 def upload_to_ruten():
@@ -219,6 +253,8 @@ def upload_to_ruten():
     is_trans_img = int(request.values.get('is_trans_img'))
     is_add_main_logo = int(request.values.get('is_add_main_logo'))
     img_save_path = request.values.get('img_save_path')
+    is_save_img = int(request.values.get('is_save_img'))
+
     # 判断 is_trans_img 对应的参数
     if is_trans_img == 0:
         max_count = 0
@@ -230,7 +266,7 @@ def upload_to_ruten():
             max_count = 10
 
     # 创建 RutenUpload 的实例
-    ruten_uplaod_instance = RutenUpload(store, is_add_main_logo=is_add_main_logo, img_save_path=img_save_path)
+    ruten_uplaod_instance = RutenUpload(store, is_add_main_logo=is_add_main_logo, img_save_path=img_save_path, is_save_img=is_save_img)
 
     # 创建各个平台的实例并组装差别参数
     if platform == '1688':
@@ -250,18 +286,23 @@ def upload_to_ruten():
         # 创建 taobao 的实例
         taobao_instance = TaoBao(json.loads(source))
         product_data = taobao_instance.build_product_package()
-        if product_data['code'] != 0:
-            return {'code': -3, 'store': store, 'data': product_data['message']}
-        product_id = product_data['data']['product_id']
 
     elif platform == 'pinduoduo':
         pinduoduo_instance = PinDuoDuo(json.loads(source))
         product_data = pinduoduo_instance.build_product_package()
-        if product_data['code'] != 0:
-            return {'code': -3, 'store': store, 'data': product_data['message']}
-        product_id = product_data['data']['product_id']
 
+    if product_data['code'] != 0:
+        return {'code': -5, 'store': store, 'data': product_data['message']}
+
+    product_id = product_data['data']['product_id']
     logging.info(f'{product_id}-商品数据包成功解析')
+
+    # 获取违禁品词列表
+    forbidden_items = ruten_uplaod_instance.load_forbidden_items()
+    for i in forbidden_items:
+        if i in product_data['data']['title'].lower():
+            logging.warning(f'{product_id}-{category_id}-标题包含违禁词-{i}')
+            return {'code': -5, 'store': store, 'product_id': product_id, 'data': f'标题包含违禁词-{i}'}
 
     # 判断类目是否可用
     category_id_status = ruten_uplaod_instance.check_category_id(category_id)

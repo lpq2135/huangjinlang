@@ -250,7 +250,7 @@ def get_the_id_that_cannot_be_listed(store):
         mysql_pool.close_mysql(cnx, cursor)
 
 class RutenUpload(BaseCrawler):
-    def __init__(self, store, upload_count=None, is_add_main_logo=None, img_save_path=None, proxies=None):
+    def __init__(self, store, upload_count=None, is_add_main_logo=None, img_save_path=None, is_save_img=None, proxies=None):
         self.store = store
         cookie = self.get_cookie_by_api()
         if cookie is None:
@@ -273,6 +273,7 @@ class RutenUpload(BaseCrawler):
         self.watermark_image_path = self.check_watermark_image_exists()
         self.is_add_main_logo = is_add_main_logo
         self.img_save_path = img_save_path
+        self.is_save_img = is_save_img
         self.lock = Lock()
 
     def check_watermark_image_exists(self):
@@ -385,17 +386,19 @@ class RutenUpload(BaseCrawler):
             if image_result.status_code == 404:
                 return {'code': 3, 'error': 'Image not found'}
 
-            # 2. 保存原始图片到本地（按product_id分类）
-            if self.img_save_path:
-                # 创建product_id子文件夹
-                product_folder = os.path.join(self.img_save_path, str(product_id))
-                os.makedirs(product_folder, exist_ok=True)
-                # 生成文件名：idx+1.jpg
-                filename = f'{idx + 1}_1.jpg' if idx == 0 else f'{idx + 1}.jpg'
-                original_filepath = os.path.join(product_folder, filename)
-                with open(original_filepath, 'wb') as f:
-                    f.write(image_result.content)
-                logging.info(f'{self.store}-{product_id}-图片已保存到: {original_filepath}')
+            # 判断是否保存图片
+            if self.is_save_img == 1:
+                # 2. 保存原始图片到本地（按product_id分类）
+                if self.img_save_path:
+                    # 创建product_id子文件夹
+                    product_folder = os.path.join(self.img_save_path, str(product_id))
+                    os.makedirs(product_folder, exist_ok=True)
+                    # 生成文件名：idx+1.jpg
+                    filename = f'{idx + 1}_1.jpg' if idx == 0 else f'{idx + 1}.jpg'
+                    original_filepath = os.path.join(product_folder, filename)
+                    with open(original_filepath, 'wb') as f:
+                        f.write(image_result.content)
+                    logging.info(f'{self.store}-{product_id}-图片已保存到: {original_filepath}')
 
             # 3. 判断是否需要水印
             need_watermark = (
@@ -439,6 +442,8 @@ class RutenUpload(BaseCrawler):
                 try:
                     tree = html.fromstring(response.text)
                     id_list = tree.xpath('//tr[@class="row-odd" or @class="row-even"]/@data-gno')
+                    if len(id_list) == 0:
+                        continue
                     new_list = []
                     for i in id_list:
                         product_data = {
@@ -456,6 +461,7 @@ class RutenUpload(BaseCrawler):
                     return new_list
                 except Exception as e:
                     logging.warning(f'{self.store}-获取第{page}页商品信息失败, 错误信息：{e}')
+                    time.sleep(2)
         return None
 
     # 处理类目编号
@@ -816,18 +822,15 @@ class RutenUpload(BaseCrawler):
         ruten_product = Ruten(product_id, proxies=self.proxies)
         product_data = ruten_product.build_product_package()
 
-        if product_data['code'] == 3:
-            return {'code': 'upload_3', 'status': False, 'product_id': product_id}
-
-        # 获取规格数
-        specifications = product_data['data']['specifications']
-
         if product_data['code'] != 0:
             logging.warning(f'{self.store}-{product_id}-处理商品上货数据包失败')
             return {'code': 'upload_1', 'status': False, 'product_id': product_id}
         elif product_data['code'] == 3:
             logging.warning(f'{self.store}-{product_id}-主图异常进行下架处理')
             return {'code': 'upload_3', 'status': False, 'product_id': product_id}
+
+        # 获取规格数
+        specifications = product_data['data']['specifications']
 
         # 组装sku数据
         # 规格不等于 0
@@ -1077,7 +1080,7 @@ def process_store(row):
         unable_to_list = get_the_id_that_cannot_be_listed(store)
 
         # 启动参数
-        page_num = 200  # 初始页数
+        page_num = 400  # 初始页数
         while True:
             # 判断当前时间是否符合启动条件
             while True:
@@ -1149,7 +1152,7 @@ def process_store(row):
                     ruten_instance.remove_products(remove_list)
 
                 # 设置页数
-                page_num = 200 if page_num == 1 else page_num - 1
+                page_num = 400 if page_num == 1 else page_num - 1
 
     except Exception as e:
         logging.exception(f"{store}-任务处理异常: {str(e)}")

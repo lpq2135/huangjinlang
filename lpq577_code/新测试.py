@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 
 # def product_items_v2(product_id):
 #     url = f'https://rapi.ruten.com.tw/api/items/v2/list?gno={product_id}&level=simple'
@@ -26,8 +27,15 @@ import json
 # for product_data in product_id_lsit:
 #     print(1)
 # print(2)
+#
+# text = '切菜手殘黨必備 電動切菜機 全自動切菜機 滾筒切菜器 切菜機lhnj'
+# # print(len(text))
+#
+#
+# pattern = r'[a-zA-Z0-9]+$'
+# result = re.sub(pattern, '', text)
+# print(result)
 
-text = '工裝褲 戰術褲 休閒褲 縮口褲 工裝長褲 登山褲 長褲男 彈力工作褲 彈力工'
-print(len(text))
-
-
+img = 'https://cbu01.alicdn.com/img/ibank/O1CN01iFCKRf2DoxlJf6sI7_!!2588788657-0-cib.jpg'
+result = requests.get(img)
+print(result.status_code)

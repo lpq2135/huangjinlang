@@ -74,8 +74,21 @@ class Ruten(BaseCrawler):
         v3_url = f'https://rtapi.ruten.com.tw/api/search/v3/index.php/core/prod?q={keywords}&type=direct&sort=rnk%2Fdc&limit=60&offset=1'
         v3_result = self.request_function(v3_url, headers=self.headers).json()
         v3_ids = ','.join(i['Id'] for i in v3_result['Rows'])
+        # 获取折扣活动价格
+        discountprice_data = self.get_ids_by_discountprice(v3_ids)
+        discountprice_result = {i['ProdId']: i['Discount'][0]['Price'] for i in discountprice_data if len(i['Discount']) != 0}
         v3_data = self.get_titles_by_v2(v3_ids)
+        # 将价格替换成活动价格
+        for i in v3_data:
+            if i['ProdId'] in discountprice_result:
+                i['PriceRange'] = discountprice_result[i['ProdId']]
         return v3_data
+
+    def get_ids_by_discountprice(self, v3_ids):
+        """通过前台搜索词v3和v1接口获取商品id和商品信息"""
+        discountprice_url = f'https://rtapi.ruten.com.tw/api/prod/v3/index.php/prod/discountprice?id={v3_ids}'
+        discountprice_result = self.request_function(discountprice_url, headers=self.headers).json()
+        return discountprice_result
 
     def get_titles_by_v2(self, ids):
         """通过ids获取商品信息"""

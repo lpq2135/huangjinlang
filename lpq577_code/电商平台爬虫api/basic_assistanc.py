@@ -5,9 +5,9 @@ import logging
 import time
 import os
 import io
+import sys
+
 from urllib.parse import urlparse, urlunparse
-
-
 from opencc import OpenCC
 from PIL import Image, ImageEnhance
 from requests.exceptions import ReadTimeout, RequestException
@@ -31,10 +31,6 @@ class BaseCrawler:
                     timeout=timeout
                 )
 
-                # 对于404或400状态码，直接返回响应对象
-                if response.status_code in (404, 400):
-                    return response
-
                 # 检查HTTP状态码，如果不是2xx会抛出HTTPError异常
                 response.raise_for_status()
                 return response
@@ -46,7 +42,7 @@ class BaseCrawler:
 
             except RequestException as e:
                 if hasattr(e, 'response') and e.response is not None:
-                    if e.response.status_code in (404, 400):
+                    if e.response.status_code in (400, 401, 403, 404):
                         return e.response
                 logging.warning(f"请求错误 ({method}-{url}): {e}. 重试中... ({attempt + 1}/{max_retries})")
                 time.sleep(2 ** attempt)
@@ -185,6 +181,27 @@ class BaseCrawler:
             fixed_url = url
         return fixed_url
 
+    def load_forbidden_items(self):
+        """加载违禁品列表"""
+        if hasattr(sys, '_MEIPASS'):
+            # 打包后的情况 - 从临时目录所在目录读取
+            file_path = os.path.join(sys._MEIPASS, "最新违禁品.txt")
+        else:
+            # 未打包的情况 - 使用固定桌面路径
+            file_path = r"C:\Users\Administrator\Desktop\最新违禁品.txt"
+
+        # 读取文件内容
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return [line.strip().lower() for line in f if line.strip()]
+
+        except FileNotFoundError:
+            logging.warning(f'错误:：违禁品列表文件未找到: {file_path}')
+            return []
+        except Exception as e:
+            logging.warning(f'读取违禁品列表时出错: {e}')
+            return []
+
     def zh_to_tw(self, data):
         """翻译成繁体"""
         converter = OpenCC('s2tw')
@@ -210,10 +227,13 @@ class BaseCrawler:
         # 表情符号
         emoticons = ['💯', '🔊', '📢', '🔔', '⚙️', '🔗', '🏷️', '⏳', '📌', '🌀', '💝', '✅']
         # 拼装图片
+        html_img = ''
         if detail_img:
             html_img = "".join(f'<img alt="" src="{url}" width="800">' for url in detail_img[2:-1])
+
         # 拼装文字
-        if detail_img:
+        html_text = ''
+        if detail_text:
             emo = random.choice(emoticons)
             html_text = "".join(
                 f'<p style="color: rgba(0, 0, 0, 0.8); font-family: helvetica, arial, lihei pro, microsoft jhenghei; background-color: #ffffff; margin-bottom: 8px; font-size: 14pt"><strong>{emo}{text}</strong></p>'

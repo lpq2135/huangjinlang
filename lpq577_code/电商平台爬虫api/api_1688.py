@@ -75,7 +75,7 @@ class Alibaba(BaseCrawler):
         for i in images_data[:8]:
             response = self.request_function(i, headers=self.headers)
             # 主图出现 404 异常
-            if response.status_code == 404:
+            if response.status_code == 404 or response.status_code == 403:
                 return []
             # 主图正常
             elif response.status_code == 200:
