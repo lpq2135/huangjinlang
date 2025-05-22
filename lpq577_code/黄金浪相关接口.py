@@ -6,18 +6,19 @@ import 图鉴打码
 import re
 import math
 import logging
-from logging_config import setup_logger
+import translate_google_api
 
+from logging_config import setup_logger
 from opencc import OpenCC
 from urllib.parse import quote_plus
 from flask import Flask, request
+from lpq577_code.daraz相关 import daraz_api
 from 电商平台爬虫api.api_1688 import Alibaba
 from ruten循环上下架 import RutenUpload
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.api_taobao import TaoBao
 from 象寄翻译 import XiangJi
 from 电商平台爬虫api.api_pinduoduo import PinDuoDuo
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
 
 # 在创建Flask应用前设置日志
 setup_logger()
@@ -49,6 +50,15 @@ def translate_text_with_deepl():
             logging.warning(f"deepl翻译请求失败，尝试第{_ + 1}次. Error: {e}")
     raise Exception("deepl翻译请求失败")
 
+@app.route('/google/translate', methods=['post'])
+def translate_text_with_google():
+    """google翻译接口破解版"""
+    text = request.values.get('text')
+    target_language = request.values.get('target_language')
+    result = translate_google_api.translated_content(text, target_language)
+    return result[0]
+
+
 @app.route('/auth_token_create_by_daraz', methods=['post'])
 def auth_token_create_by_daraz():
     """获取daraz店铺的token"""
@@ -56,7 +66,7 @@ def auth_token_create_by_daraz():
     upload_site = request.values.get('upload_site')
     product = daraz_api.DarazProduct(upload_site=upload_site)
     store_information = product.generate_access_token(code)
-    return store_information
+    return store_information.json()
 
 
 @app.route('/format_alibaba', methods=['post'])

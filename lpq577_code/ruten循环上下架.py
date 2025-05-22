@@ -1,5 +1,3 @@
-import requests
-import base64
 import logging
 import logging_config
 import re
@@ -14,17 +12,15 @@ import pandas as pd
 import concurrent.futures
 import mysql.connector
 
-from PIL import Image, ImageEnhance
+from PIL import Image
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.basic_assistanc import BaseCrawler
-from requests.adapters import HTTPAdapter
 from 数据库连接 import MySqlPool
 from datetime import datetime
 from lxml import html
-from bs4 import BeautifulSoup
 from threading import Lock
 from urllib.parse import urlparse, parse_qs
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, as_completed, TimeoutError
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 
 # code 状态注释
@@ -913,6 +909,7 @@ class RutenUpload(BaseCrawler):
             return {'code': 'upload_4', 'status': False, 'product_id': product_id, 'after_listing_id': g_no}
         elif upload_products['code'] == 5:
             return {'code': 'upload_5', 'status': False, 'product_id': product_id}
+        return {'code': 'upload_1', 'status': False, 'product_id': product_id}
 
     # 上传产品总流程
     def upload_products(self, product_id, upload_product_package):
@@ -1080,7 +1077,7 @@ def process_store(row):
         unable_to_list = get_the_id_that_cannot_be_listed(store)
 
         # 启动参数
-        page_num = 400  # 初始页数
+        page_num = 300  # 初始页数
         while True:
             # 判断当前时间是否符合启动条件
             while True:

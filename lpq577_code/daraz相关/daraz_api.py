@@ -1,16 +1,13 @@
 import json
 import re
-import requests
 import time
 import hashlib
 import hmac
 import urllib.parse
 import random
 import xmltodict
-import math
 import itertools
 import math
-import concurrent.futures
 
 from lpq577_code.电商平台爬虫api.basic_assistanc import BaseCrawler
 from datetime import datetime
@@ -653,7 +650,7 @@ class DarazProduct(DarazBase, BaseCrawler):
         return {'upload_site': self.upload_site, 'upload_code': -7, 'product_id': self.product_id,
                 'data': self.category_attributes['data']}
 
-    def get_product_list(self, offset):
+    def get_product_list(self):
         """
         获取产品的详细信息
         :return: 产品信息
@@ -664,8 +661,6 @@ class DarazProduct(DarazBase, BaseCrawler):
             'sign_method': 'sha256',
             'timestamp': self.timestamp,
             'filter': 'live',
-            'limit': '20',
-            'offset': str(offset)
         }
         url = self.build_url(parameters, '/products/get')
         return self.request_function(url).json()

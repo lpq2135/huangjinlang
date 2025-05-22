@@ -3,20 +3,16 @@ import logging
 import sys
 import time
 from lpq577_code.daraz相关 import daraz_api
-import logging_config
 import datetime
 
 from collections import defaultdict
-from 数据库连接 import MySqlPool
-from 文字翻译 import Translator
-from 电商平台数据组装api import Alibaba
-from 象寄翻译 import XiangJi
 from itertools import cycle
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # 获取店铺的 access_token 和其他相关信息
 def get_access_token():
+    """获取店铺的 access_token 和其他相关信息"""
     cnx, cursor = mysql_pool.get_conn()
     try:
         cursor.execute(
@@ -32,9 +28,9 @@ def get_access_token():
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-
 # 获取待处理的商品数据
 def get_product_data():
+    """获取待处理的商品数据"""
     cnx, cursor = mysql_pool.get_conn()
     try:
         table_name = f'product_id_deduplication_by_{account}'
@@ -65,6 +61,7 @@ def update_product_status(product_id):
 
 # 记录商品上传状态
 def record_product_status(upload_info):
+    """记录商品上传状态"""
     # 从数据库连接池中获取连接和游标对象
     cnx, cursor = mysql_pool.get_conn()
 

@@ -36,6 +36,9 @@ import re
 # result = re.sub(pattern, '', text)
 # print(result)
 
-img = 'https://cbu01.alicdn.com/img/ibank/O1CN01iFCKRf2DoxlJf6sI7_!!2588788657-0-cib.jpg'
-result = requests.get(img)
-print(result.status_code)
+# img = 'https://cbu01.alicdn.com/img/ibank/O1CN01iFCKRf2DoxlJf6sI7_!!2588788657-0-cib.jpg'
+# result = requests.get(img)
+# print(result.status_code)
+
+text = 'تحفہ－دارچینی چھوٹا سر کرسمس'
+print(len(text))
