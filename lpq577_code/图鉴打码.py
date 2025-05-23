@@ -38,12 +38,12 @@ import requests
 # 五、拼图识别
 # 53：拼图识别
 def base64_api(uname, pwd, img, typeid):
-    with open(img, 'rb') as f:
+    with open(img, "rb") as f:
         base64_data = base64.b64encode(f.read())
         b64 = base64_data.decode()
     data = {"username": uname, "password": pwd, "typeid": typeid, "image": b64}
     result = json.loads(requests.post("http://api.ttshitu.com/predict", json=data).text)
-    if result['success']:
+    if result["success"]:
         return result["data"]["result"]
     else:
         # ！！！！！！！注意：返回 人工不足等 错误情况 请加逻辑处理防止脚本卡死 继续重新 识别
@@ -53,5 +53,5 @@ def base64_api(uname, pwd, img, typeid):
 
 if __name__ == "__main__":
     img_path = r"C:\Users\Administrator\Desktop\111.bmp"
-    result = base64_api(uname='huangjinlang', pwd='Qiang123', img=img_path, typeid=27)
+    result = base64_api(uname="huangjinlang", pwd="Qiang123", img=img_path, typeid=27)
     print(result)

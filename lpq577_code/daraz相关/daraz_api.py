@@ -12,21 +12,16 @@ import math
 from lpq577_code.电商平台爬虫api.basic_assistanc import BaseCrawler
 from datetime import datetime
 
-import time
-import hmac
-import hashlib
-import urllib.parse
-
 
 class DarazBase:
     """
-    Daraz平台的API接口基类，封装了通用的请求依赖（如签名生成、URL构建等）。
-    所有Daraz API请求类可以继承此基类以复用公共方法。
+    Daraz平台的API接口基类，封装了通用的请求方法和签名逻辑。
+    所有Daraz API相关的操作都应继承此类。
     """
 
     def __init__(self):
-        """初始化Daraz API基础配置"""
-        # 不同国家/地区的API域名映射
+        """初始化API基础配置"""
+        # 各国家/地区的API端点
         self.regions = {
             "mm": "https://api.shop.com.mm/rest",  # 缅甸
             "bd": "https://api.daraz.com.bd/rest",  # 孟加拉国
@@ -34,73 +29,83 @@ class DarazBase:
             "lk": "https://api.daraz.lk/rest",  # 斯里兰卡
             "np": "https://api.daraz.com.np/rest",  # 尼泊尔
         }
-        self.app_key = "502742"  # 开发者App Key
-        self.app_secret = "0XGyiUMf0obAP9FueDD16fid4M5xgmaV"  # 开发者App Secret
+        self.app_key = "502742"  # 开发者应用Key
+        self.app_secret = "0XGyiUMf0obAP9FueDD16fid4M5xgmaV"  # 开发者应用密钥
 
     @property
     def timestamp(self):
-        """获取当前时间戳（毫秒级），用于API请求签名"""
+        """获取当前时间戳（毫秒级）"""
         return int(time.time() * 1000)
 
     def sign(self, parameters, api_path):
         """
-        根据Daraz API规则生成HMAC-SHA256签名
-        :param parameters: 请求参数字典（需参与签名的部分）
-        :param api_path:   API路径（如"/auth/token/create"）
-        :return: 大写形式的十六进制签名字符串
+        生成API请求签名（HMAC-SHA256）
+
+        参数:
+            parameters: dict - 请求参数键值对
+            api_path: str - API接口路径
+
+        返回:
+            str - 大写的16进制签名字符串
         """
         # 1. 参数按字典序排序
         sort_dict = sorted(parameters)
 
-        # 2. 拼接签名字符串：API路径 + 键值对（key1value1key2value2...）
+        # 2. 拼接签名字符串：API路径 + 排序后的参数键值对
         parameters_str = "%s%s" % (
             api_path,
-            str().join("%s%s" % (key, parameters[key]) for key in sort_dict)
+            str().join("%s%s" % (key, parameters[key]) for key in sort_dict),
         )
 
-        # 3. 使用HMAC-SHA256加密
+        # 3. 使用HMAC-SHA256计算签名
         h = hmac.new(
-            self.app_secret.encode("utf-8"),
-            parameters_str.encode("utf-8"),
-            digestmod=hashlib.sha256
+            self.app_secret.encode(),
+            parameters_str.encode(),
+            digestmod=hashlib.sha256,
         )
 
-        # 4. 返回大写的十六进制签名
-        return h.hexdigest().upper()
+        return h.hexdigest().upper()  # 返回大写的签名
 
     def build_url(self, parameters, api_path):
         """
         构建完整的API请求URL（含签名）
-        :param parameters: 所有请求参数（包括公共参数如app_key等）
-        :param api_path:   API路径（如"/product/get"）
-        :return: 完整的URL字符串
-        """
-        # 1. 对参数进行URL编码（注意：空格替换为+号）
-        query_string = "&".join(
-            f"{urllib.parse.quote(k, safe="")}={urllib.parse.quote(str(v), safe="")}"
-            for k, v in parameters.items()
-        ).replace("%20", "+")
 
-        # 2. 拼接基础URL和参数
+        参数:
+            parameters: dict - 请求参数
+            api_path: str - API接口路径
+
+        返回:
+            str - 完整的请求URL
+        """
+        # 1. 对参数进行URL编码
+        query_string = "&".join(
+            f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(str(v), safe='')}"
+            for k, v in parameters.items()
+        )
+
+        # 2. 处理空格编码（Daraz API特殊要求）
+        query_string = query_string.replace("%20", "+")
+
+        # 3. 拼接基础URL
         url = f"{self.site_url}{api_path}?{query_string}"
 
-        # 3. 添加签名参数
+        # 4. 追加签名参数
         return f"{url}&sign={self.sign(parameters, api_path)}"
 
 
 class DarazProduct(DarazBase, BaseCrawler):
-    """
-    daraz上货处理的相关代码
-    """
+    """daraz上货处理的相关代码"""
 
     def __init__(self, access_token=None, upload_site=None, attrs=None):
         super().__init__()
-        self.upload_site = upload_site
-        self.site_url = self.regions[self.upload_site]
-        self.access_token = access_token
-        self.attrs = attrs
-        self.product_id = self.attrs.get("product_id") if self.attrs else None
-        self.category_attributes = self.get_category_attributes() if self.attrs else None
+        self.upload_site = upload_site  # 上货站点
+        self.site_url = self.regions[self.upload_site]  # 获取站点的对应的url
+        self.access_token = access_token  # 店铺对应的access_token
+        self.attrs = attrs  # 上货数据包
+        self.product_id = self.attrs.get("product_id") if self.attrs else None  # 商品ID（编辑时必需）
+        self.category_attributes = (
+            self.get_category_attributes() if self.attrs else None
+        )   # 分类属性（延迟加载）
 
     def generate_access_token(self, code):
         """生成access_token"""
@@ -109,7 +114,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "app_secret": self.app_secret,
             "sign_method": "sha256",
             "timestamp": self.timestamp,
-            "code": code
+            "code": code,
         }
         url = self.build_url(parameters, "/auth/token/create")
         response = self.request_function(url, "post")
@@ -121,7 +126,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "access_token": self.access_token,
             "app_key": self.app_key,
             "sign_method": "sha256",
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
         url = self.build_url(parameters, "/image/upload")
         with open(file_path, "rb") as f:
@@ -144,7 +149,7 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "access_token": self.access_token,
                 "app_key": self.app_key,
                 "sign_method": "sha256",
-                "timestamp": self.timestamp
+                "timestamp": self.timestamp,
             }
             url = self.build_url(parameters, "/images/migrate")
             try:
@@ -152,17 +157,23 @@ class DarazProduct(DarazBase, BaseCrawler):
                 batch_id = response["batch_id"]
                 result = self.image_response_get(batch_id)
                 if result["status_code"] == 0:
-                    logging.info(f"{self.product_id}-{self.upload_site}-图片上传daraz服务器成功")
+                    logging.info(
+                        f"{self.product_id}-{self.upload_site}-图片上传daraz服务器成功"
+                    )
                     return result["data"]
                 elif result["status_code"] == 1:
                     retry += 1
                     time.sleep(2)
-                    logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次")
+                    logging.warning(
+                        f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次"
+                    )
                 elif result["status_code"] == 2:
                     return None
             except Exception:
                 retry += 1
-                logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次")
+                logging.warning(
+                    f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次"
+                )
 
     def migrate_image(self, images):
         """上传单张网络图片"""
@@ -174,7 +185,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "access_token": self.access_token,
             "app_key": self.app_key,
             "sign_method": "sha256",
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
         url = self.build_url(parameters, "/image/migrate")
         try:
@@ -193,7 +204,7 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "access_token": self.access_token,
                 "app_key": self.app_key,
                 "sign_method": "sha256",
-                "timestamp": self.timestamp
+                "timestamp": self.timestamp,
             }
             url = self.build_url(parameters, "/image/response/get")
             try:
@@ -207,10 +218,14 @@ class DarazProduct(DarazBase, BaseCrawler):
                 elif response["code"] == "301":
                     return {"status_code": 2, "data": None}
                 else:
-                    logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次")
+                    logging.warning(
+                        f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次"
+                    )
                     time.sleep(3)
             except Exception:
-                logging.warning(f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次")
+                logging.warning(
+                    f"{self.product_id}-{self.upload_site}-daraz网络图片获取异常（多张）,重试第{_ + 1}次"
+                )
                 time.sleep(3)
         return {"status_code": 1, "data": None}
 
@@ -225,7 +240,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "sign_method": "sha256",
             "timestamp": self.timestamp,
             "primary_category_id": self.attrs.get("primary_category"),
-            "language_code": "en_US"
+            "language_code": "en_US",
         }
         url = self.build_url(parameters, "/category/attributes/get")
         time.sleep(2)
@@ -234,20 +249,38 @@ class DarazProduct(DarazBase, BaseCrawler):
                 result = self.perform_request(url, "get")
                 if result["code"] == "0":
                     is_mandatory_attributes = {
-                        "data": [x for x in result["data"] if x["attribute_type"] == "normal" and x["is_mandatory"] == 1
-                                 and x["name"] != "name" and x["name"] != "name_en" and x["name"] != "short_description"
-                                 and x["name"] != "short_description_en" and x["name"] != "description_en"
-                                 and x["name"] != "brand"]
+                        "data": [
+                            x
+                            for x in result["data"]
+                            if x["attribute_type"] == "normal"
+                            and x["is_mandatory"] == 1
+                            and x["name"] != "name"
+                            and x["name"] != "name_en"
+                            and x["name"] != "short_description"
+                            and x["name"] != "short_description_en"
+                            and x["name"] != "description_en"
+                            and x["name"] != "brand"
+                        ]
                     }
-                    is_mandatory_sku = [x for x in result["data"] if
-                                        x["attribute_type"] == "sku" and x["is_sale_prop"] == 1
-                                        and x["name"] != "SellerSku" and x["name"] != "price" and x[
-                                            "name"] != "package_weight"
-                                        and x["name"] != "package_length" and x["name"] != "package_width"
-                                        and x["name"] != "package_height" and x["name"] != "__images__"
-                                        and x["name"] != "quantity" and x["name"] != "special_price"
-                                        and x["name"] != "special_from_date" and x["name"] != "special_to_date"
-                                        and x["name"] != "seller_promotion" and x["name"] != "package_content"]
+                    is_mandatory_sku = [
+                        x
+                        for x in result["data"]
+                        if x["attribute_type"] == "sku"
+                        and x["is_sale_prop"] == 1
+                        and x["name"] != "SellerSku"
+                        and x["name"] != "price"
+                        and x["name"] != "package_weight"
+                        and x["name"] != "package_length"
+                        and x["name"] != "package_width"
+                        and x["name"] != "package_height"
+                        and x["name"] != "__images__"
+                        and x["name"] != "quantity"
+                        and x["name"] != "special_price"
+                        and x["name"] != "special_from_date"
+                        and x["name"] != "special_to_date"
+                        and x["name"] != "seller_promotion"
+                        and x["name"] != "package_content"
+                    ]
                     return is_mandatory_attributes, is_mandatory_sku
                 elif result["code"] == "4228":
                     return {"status": False, "data": "此类目在该站点不合法"}
@@ -256,7 +289,9 @@ class DarazProduct(DarazBase, BaseCrawler):
                 elif result["code"] == "IllegalAccessToken":
                     return {"status": False, "data": "access_token异常"}
             except Exception as e:
-                logging.warning(f"{self.product_id}-获取类目属性失败，重试第{_ + 1}次，错误信息：{e}")
+                logging.warning(
+                    f"{self.product_id}-获取类目属性失败，重试第{_ + 1}次，错误信息：{e}"
+                )
                 time.sleep(2)
         return None
 
@@ -270,8 +305,11 @@ class DarazProduct(DarazBase, BaseCrawler):
         unique_sku1, unique_sku2 = set(), set()
         result = dict()
         for i in self.attrs.get("skumodel")["sku_data"]["sku_parameter"]:
-            i["name"] = ((re.sub(r"\s{2,}", " ", re.sub(r"\(.*?\)", "", i["name"]))).replace("~", "-")).replace(" kg",
-                                                                                                                "kg")
+            i["name"] = (
+                (re.sub(r"\s{2,}", " ", re.sub(r"\(.*?\)", "", i["name"]))).replace(
+                    "~", "-"
+                )
+            ).replace(" kg", "kg")
             if specifications == 1:
                 unique_sku1.add(i["name"])
                 total_len_over_20_sku1 += len(i["name"]) > 20
@@ -284,16 +322,22 @@ class DarazProduct(DarazBase, BaseCrawler):
                 total_len_over_20_sku2 += len(sku2) > 20
 
         if specifications == 1:
-            result["sku1_percentage"] = total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
+            result["sku1_percentage"] = (
+                total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
+            )
         elif specifications == 2:
-            result["sku1_percentage"] = total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
-            result["sku2_percentage"] = total_len_over_20_sku2 / len(unique_sku2) if unique_sku2 else 0
+            result["sku1_percentage"] = (
+                total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
+            )
+            result["sku2_percentage"] = (
+                total_len_over_20_sku2 / len(unique_sku2) if unique_sku2 else 0
+            )
         return result
 
     def assembly_attributes(self, sku_transformation_list):
         """
-         对详情进行处理，若需要在详情展示sku属性信息，则判断sku属性的数量进行拆分，列表项最多为10；若不需要在详情展示sku属性信息，则填充在
-         【veiw more】 的详情页面
+        对详情进行处理，若需要在详情展示sku属性信息，则判断sku属性的数量进行拆分，列表项最多为10；若不需要在详情展示sku属性信息，则填充在
+        【veiw more】 的详情页面
         """
 
         # 列表处理函数
@@ -301,7 +345,9 @@ class DarazProduct(DarazBase, BaseCrawler):
             base = math.floor(number / 10)
             larger_number = math.ceil(number / 10)
             larger_number_count = number % 10
-            result = [larger_number] * larger_number_count + [base] * (10 - larger_number_count)
+            result = [larger_number] * larger_number_count + [base] * (
+                10 - larger_number_count
+            )
             return result
 
         # 拆分列表
@@ -313,34 +359,55 @@ class DarazProduct(DarazBase, BaseCrawler):
 
         dict_attributes = self.category_attributes[0]
         # 获取标题
-        title = (self.attrs.get("title").replace(",", "")).replace(""", "")
+        title = (self.attrs.get("title").replace(",", "")).replace('"', "")
         # 获取白底图
         promotion_whitebkg_image = self.attrs.get("promotion_whitebkg_image")
         if promotion_whitebkg_image:
             photo_name = promotion_whitebkg_image["photo_name"]
-            photo_xpath = r"D:/Daraz运营工具/Daraz采集组装工具/附件库/图片下载/" + photo_name
+            photo_xpath = (
+                r"D:/Daraz运营工具/Daraz采集组装工具/附件库/图片下载/" + photo_name
+            )
         # 获取详情文字
-        details_text_description = self.attrs.get("details_text_description") if self.attrs.get(
-            "details_text_description") else []
+        details_text_description = (
+            self.attrs.get("details_text_description")
+            if self.attrs.get("details_text_description")
+            else []
+        )
         # 处理详情图片成html格式
-        detailed_picture_html = "".join(f"<img src="{url}" alt="Image">" for url in self.attrs.get("detailed_picture"))
+        detailed_picture_html = "".join(
+            f'<img src="{url}" alt="Image">'
+            for url in self.attrs.get("detailed_picture")
+        )
 
         # 处理最终的html格式
         if sku_transformation_list:
             if len(sku_transformation_list) <= 10:
-                sku_text_description_html = "<ul>" + "".join(
-                    f"<li>{item}</li>" for item in sku_transformation_list) + "</ul>"
+                sku_text_description_html = (
+                    "<ul>"
+                    + "".join(f"<li>{item}</li>" for item in sku_transformation_list)
+                    + "</ul>"
+                )
             else:
                 sku_output = split_list_into_tens(sku_transformation_list)
-                sku_text_description_html = "<ul>" + "".join(
-                    f"<li>{"  ◕  ".join(map(str, i))}</li>" for i in sku_output) + "</ul>"
+                sku_text_description_html = (
+                    "<ul>"
+                    + "".join(
+                        f'<li>{"  ?  ".join(map(str, i))}</li>' for i in sku_output
+                    )
+                    + "</ul>"
+                )
             # 处理详情文字html格式
             details_text_description_html = (
-                    "<article class="lzd-article" style="white-space:break-spaces"><p style="line-height:1.7;text-align:left;text-indent:0;margin-left:0;margin-top:0;margin-bottom:0"><span style="font-weight:bold;background-color:rgb(153, 204, 255);font-size:18pt">Product Introduction:</span></p>" + "".join(
-                f"<p style="font-size:12pt">● {item}</p>" for item in details_text_description) + "</ul>")
+                '<article class="lzd-article" style="white-space:break-spaces"><p style="line-height:1.7;text-align:left;text-indent:0;margin-left:0;margin-top:0;margin-bottom:0"><span style="font-weight:bold;background-color:rgb(153, 204, 255);font-size:18pt">Product Introduction:</span></p>'
+                + "".join(
+                    f'<p style="font-size:12pt">● {item}</p>'
+                    for item in details_text_description
+                )
+                + "</ul>"
+            )
             html_all = details_text_description_html + "<br/>" + detailed_picture_html
             # 组装上货属性值
-            product_attributes = {
+            product_Attributes = {
                 "name": title,
                 "name_en": title,
                 "short_description": sku_text_description_html,
@@ -348,19 +415,31 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "description": html_all,
                 "description_en": html_all,
                 "brand": "No Brand",
-                "promotion_whitebkg_image": self.upload_image(photo_xpath,
-                                                              photo_name) if promotion_whitebkg_image else None
+                "promotion_whitebkg_image": (
+                    self.upload_image(photo_xpath, photo_name)
+                    if promotion_whitebkg_image
+                    else None
+                ),
             }
         else:
             if len(details_text_description) <= 10:
-                details_text_description_html = "<ul>" + "".join(
-                    f"<li>{item}</li>" for item in details_text_description) + "</ul>"
+                details_text_description_html = (
+                    "<ul>"
+                    + "".join(f"<li>{item}</li>" for item in details_text_description)
+                    + "</ul>"
+                )
             else:
                 details_text_output = split_list_into_tens(details_text_description)
-                details_text_description_html = "<ul>" + "".join(
-                    f"<li>{"  ◕  ".join(map(str, i))}</li>" for i in details_text_output) + "</ul>"
+                details_text_description_html = (
+                    "<ul>"
+                    + "".join(
+                        f'<li>{"  ?  ".join(map(str, i))}</li>'
+                        for i in details_text_output
+                    )
+                    + "</ul>"
+                )
             # 组装上货属性值
-            product_attributes = {
+            product_Attributes = {
                 "name": title,
                 "name_en": title,
                 "short_description": details_text_description_html,
@@ -368,25 +447,28 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "description": detailed_picture_html,
                 "description_en": detailed_picture_html,
                 "brand": "No Brand",
-                "promotion_whitebkg_image": self.upload_image(photo_xpath,
-                                                              photo_name) if promotion_whitebkg_image else None
+                "promotion_whitebkg_image": (
+                    self.upload_image(photo_xpath, photo_name)
+                    if promotion_whitebkg_image
+                    else None
+                ),
             }
         for x in dict_attributes["data"]:
             if x["name"] == "warranty_type":
                 product_Attributes[x["name"]] = "No Warranty"
             elif "options" in x:
                 if any("Not Specified" in option.values() for option in x["options"]):
-                    product_attributes[x["name"]] = "Not Specified"
+                    product_Attributes[x["name"]] = "Not Specified"
                 elif any("Standard" in option.values() for option in x["options"]):
-                    product_attributes[x["name"]] = "Standard"
+                    product_Attributes[x["name"]] = "Standard"
                 elif any("-" in option.values() for option in x["options"]):
-                    product_attributes[x["name"]] = "-"
+                    product_Attributes[x["name"]] = "-"
                 else:
-                    product_attributes[x["name"]] = x["options"][0]["name"]
+                    product_Attributes[x["name"]] = x["options"][0]["name"]
             else:
-                product_attributes[x["name"]] = "See description"
+                product_Attributes[x["name"]] = "See description"
 
-        return product_attributes
+        return product_Attributes
 
     def assembly_skus(self):
         """
@@ -404,10 +486,22 @@ class DarazProduct(DarazBase, BaseCrawler):
         def add_images():
             return None if i["imageUrl"] is None else {"Image": i["imageUrl"]}
 
-        def process_sku(specifications, i, sku1_property=None, sku1_property_value=None, sku2_property=None,
-                        sku2_property_value=None):
-            sale_prop = {sku1_property: sku1_property_value} if specifications == 1 else \
-                {sku1_property: sku1_property_value, sku2_property: sku2_property_value}
+        def process_sku(
+            specifications,
+            i,
+            sku1_property=None,
+            sku1_property_value=None,
+            sku2_property=None,
+            sku2_property_value=None,
+        ):
+            sale_prop = (
+                {sku1_property: sku1_property_value}
+                if specifications == 1
+                else {
+                    sku1_property: sku1_property_value,
+                    sku2_property: sku2_property_value,
+                }
+            )
             skus = {
                 "SellerSku": self.generate_random_number(8),
                 "quantity": add_quantity(),
@@ -421,23 +515,36 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "package_width": self.attrs.get("width"),
                 "package_content": self.product_id,
                 "Images": add_images(),
-                "saleProp": sale_prop
+                "saleProp": sale_prop,
             }
             return skus
 
         def process_variation(specifications, sku1_property=None, sku2_property=None):
             is_mandatory_sku = self.category_attributes[1]
             name_list = [item["name"] for item in is_mandatory_sku]
-            has_image = True if sku_data["sku_parameter"][0]["imageUrl"] is not None else False
-            properties = [prop for prop in [sku1_property, sku2_property] if prop is not None]
-            customize = not all(any(prop in name for name in name_list) for prop in properties)
+            hasImage = (
+                True if sku_data["sku_parameter"][0]["imageUrl"] is not None else False
+            )
+            properties = [
+                prop for prop in [sku1_property, sku2_property] if prop is not None
+            ]
+            customize = not all(
+                any(prop in name for name in name_list) for prop in properties
+            )
             if customize:
                 sku1_property = sku1_property.title()
                 sku2_property = sku2_property.title() if sku2_property else None
             else:
                 sku1_property = next(x for x in name_list if sku1_property in x)
-                sku2_property = next(x for x in (item["name"] for item in is_mandatory_sku) if
-                                     sku2_property in x) if sku2_property else None
+                sku2_property = (
+                    next(
+                        x
+                        for x in (item["name"] for item in is_mandatory_sku)
+                        if sku2_property in x
+                    )
+                    if sku2_property
+                    else None
+                )
             if specifications == 2:
                 if sku1_property == sku2_property:
                     customize = True
@@ -445,9 +552,9 @@ class DarazProduct(DarazBase, BaseCrawler):
                     sku2_property = "Variants_2"
             variation1 = {
                 "name": sku1_property,
-                "hasImage": has_image,
+                "hasImage": hasImage,
                 "customize": customize,
-                "options": {"option": []}
+                "options": {"option": []},
             }
             if specifications == 1:
                 variation = {"variation1": variation1}
@@ -457,13 +564,20 @@ class DarazProduct(DarazBase, BaseCrawler):
                     "name": sku2_property,
                     "hasImage": False,
                     "customize": customize,
-                    "options": {"option": []}
+                    "options": {"option": []},
                 }
                 variation = {"variation1": variation1, "variation2": variation2}
                 return variation, hasImage, sku1_property, sku2_property
 
-        def process_tips(specifications, has_image, price, sku1_property, sku1_property_value, sku2_property=None,
-                         sku2_property_value=None):
+        def process_tips(
+            specifications,
+            hasImage,
+            price,
+            sku1_property,
+            sku1_property_value,
+            sku2_property=None,
+            sku2_property_value=None,
+        ):
             skus_under_description = {
                 "SellerSku": self.generate_random_number(8),
                 "quantity": 0,
@@ -474,19 +588,36 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "price": price,
                 "special_from_date": formatted_time(),
                 "special_to_date": "2029-12-31",
-                "Images": {
-                    "Image": "https://static-01.daraz.pk/p/3c32f9a77a8232967e996a93524d459a.jpg" if self.upload_site == "pk" else "https://static-01.daraz.com.bd/p/3c32f9a77a8232967e996a93524d459a.jpg"} if hasImage else None,
-                "package_content": self.product_id
+                "Images": (
+                    {
+                        "Image": (
+                            "https://static-01.daraz.pk/p/3c32f9a77a8232967e996a93524d459a.jpg"
+                            if self.upload_site == "pk"
+                            else "https://static-01.daraz.com.bd/p/3c32f9a77a8232967e996a93524d459a.jpg"
+                        )
+                    }
+                    if hasImage
+                    else None
+                ),
+                "package_content": self.product_id,
             }
             if specifications == 1:
-                skus_under_description.update({"saleProp": {sku1_property: sku1_property_value}})
+                skus_under_description.update(
+                    {"saleProp": {sku1_property: sku1_property_value}}
+                )
             elif specifications == 2:
                 skus_under_description.update(
-                    {"saleProp": {sku1_property: sku1_property_value, sku2_property: sku2_property_value}})
+                    {
+                        "saleProp": {
+                            sku1_property: sku1_property_value,
+                            sku2_property: sku2_property_value,
+                        }
+                    }
+                )
             return skus_under_description
 
         sku_data = self.attrs.get("skumodel")["sku_data"]
-        product_skus = {"Sku": []}
+        product_Skus = {"Sku": []}
         specifications = self.attrs.get("specifications")
         sku_transformation_list = []
         sku1_transformation_list = []
@@ -507,14 +638,16 @@ class DarazProduct(DarazBase, BaseCrawler):
                 "package_width": self.attrs.get("width"),
                 "package_content": self.product_id,
             }
-            product_skus["Sku"].append(skus)
+            product_Skus["Sku"].append(skus)
             variation = {}
         # 单规格
         elif specifications == 1:
             count = 1
             sku_percentage = self.check_sku(specifications)
             sku1_property = sku_data["sku_property_name"]["sku1_property_name"]
-            variation, has_image, sku1_property = process_variation(specifications, sku1_property)
+            variation, hasImage, sku1_property = process_variation(
+                specifications, sku1_property
+            )
             for i in sku_data["sku_parameter"]:
                 if i["name"] in sku_deduplication:
                     continue
@@ -523,19 +656,35 @@ class DarazProduct(DarazBase, BaseCrawler):
                     continue
                 if len(i["name"]) > 20 and sku_percentage["sku1_percentage"] <= 0.2:
                     continue
-                sku1_property_value = i["name"] if sku_percentage[
-                                                       "sku1_percentage"] <= 0.2 else sku1_property.title() + "_" + str(
-                    count)
-                skus = process_sku(specifications, i, sku1_property, sku1_property_value)
+                sku1_property_value = (
+                    i["name"]
+                    if sku_percentage["sku1_percentage"] <= 0.2
+                    else sku1_property.title() + "_" + str(count)
+                )
+                skus = process_sku(
+                    specifications, i, sku1_property, sku1_property_value
+                )
                 product_Skus["Sku"].insert(0, skus)
-                if sku1_property_value not in variation["variation1"]["options"]["option"]:
-                    variation["variation1"]["options"]["option"].append(sku1_property_value)
+                if (
+                    sku1_property_value
+                    not in variation["variation1"]["options"]["option"]
+                ):
+                    variation["variation1"]["options"]["option"].append(
+                        sku1_property_value
+                    )
                 if sku_percentage["sku1_percentage"] > 0.2:
-                    sku1_transformation_list.append(sku1_property_value + ": " + i["name"])
+                    sku1_transformation_list.append(
+                        sku1_property_value + ": " + i["name"]
+                    )
                     count += 1
             if sku_percentage["sku1_percentage"] > 0.2:
-                skus_under_description = process_tips(specifications, hasImage, i["price"], sku1_property,
-                                                      "Skus in details")
+                skus_under_description = process_tips(
+                    specifications,
+                    hasImage,
+                    i["price"],
+                    sku1_property,
+                    "Skus in details",
+                )
                 product_Skus["Sku"].append(skus_under_description)
                 variation["variation1"]["options"]["option"].append("Skus in details")
             sku_transformation_list = sku1_transformation_list
@@ -549,7 +698,9 @@ class DarazProduct(DarazBase, BaseCrawler):
             sku_percentage = self.check_sku(specifications)
             sku1_property = sku_data["sku_property_name"]["sku1_property_name"]
             sku2_property = sku_data["sku_property_name"]["sku2_property_name"]
-            variation, has_image, sku1_property, sku2_property = process_variation(specifications, sku1_property, sku2_property)
+            variation, hasImage, sku1_property, sku2_property = process_variation(
+                specifications, sku1_property, sku2_property
+            )
             for i in sku_data["sku_parameter"]:
                 if i["name"] in sku_deduplication:
                     continue
@@ -562,45 +713,91 @@ class DarazProduct(DarazBase, BaseCrawler):
                 if sku1_value not in unique_sku1:
                     unique_sku1[sku1_value] = count1
                     count1 += 1
-                sku1_property_value = sku1_value if sku_percentage[
-                                                        "sku1_percentage"] <= 0.2 else sku1_property.title() + "_" + str(
-                    unique_sku1[sku1_value])
+                sku1_property_value = (
+                    sku1_value
+                    if sku_percentage["sku1_percentage"] <= 0.2
+                    else sku1_property.title() + "_" + str(unique_sku1[sku1_value])
+                )
                 if len(sku2_value) > 20 and sku_percentage["sku2_percentage"] <= 0.2:
                     continue
                 if sku2_value not in unique_sku2:
                     unique_sku2[sku2_value] = count2
                     count2 += 1
-                sku2_property_value = sku2_value if sku_percentage[
-                                                        "sku2_percentage"] <= 0.2 else sku2_property.title() + "_" + str(
-                    unique_sku2[sku2_value])
+                sku2_property_value = (
+                    sku2_value
+                    if sku_percentage["sku2_percentage"] <= 0.2
+                    else sku2_property.title() + "_" + str(unique_sku2[sku2_value])
+                )
 
-                skus = process_sku(specifications, i, sku1_property, sku1_property_value, sku2_property,
-                                   sku2_property_value)
-                if sku1_property_value not in variation["variation1"]["options"]["option"]:
-                    variation["variation1"]["options"]["option"].append(sku1_property_value)
-                if sku2_property_value not in variation["variation2"]["options"]["option"]:
-                    variation["variation2"]["options"]["option"].append(sku2_property_value)
+                skus = process_sku(
+                    specifications,
+                    i,
+                    sku1_property,
+                    sku1_property_value,
+                    sku2_property,
+                    sku2_property_value,
+                )
+                if (
+                    sku1_property_value
+                    not in variation["variation1"]["options"]["option"]
+                ):
+                    variation["variation1"]["options"]["option"].append(
+                        sku1_property_value
+                    )
+                if (
+                    sku2_property_value
+                    not in variation["variation2"]["options"]["option"]
+                ):
+                    variation["variation2"]["options"]["option"].append(
+                        sku2_property_value
+                    )
                 if sku_percentage["sku1_percentage"] > 0.2:
-                    if sku1_property_value + ": " + sku1_value not in sku1_transformation_list:
-                        sku1_transformation_list.append(sku1_property_value + ": " + sku1_value)
+                    if (
+                        sku1_property_value + ": " + sku1_value
+                        not in sku1_transformation_list
+                    ):
+                        sku1_transformation_list.append(
+                            sku1_property_value + ": " + sku1_value
+                        )
                 if sku_percentage["sku2_percentage"] > 0.2:
-                    if sku2_property_value + ": " + sku2_value not in sku2_transformation_list:
-                        sku2_transformation_list.append(sku2_property_value + ": " + sku2_value)
+                    if (
+                        sku2_property_value + ": " + sku2_value
+                        not in sku2_transformation_list
+                    ):
+                        sku2_transformation_list.append(
+                            sku2_property_value + ": " + sku2_value
+                        )
                 product_Skus["Sku"].insert(0, skus)
             if sku_percentage["sku1_percentage"] > 0.2:
-                skus_under_description = process_tips(specifications, hasImage, i["price"], sku1_property,
-                                                      "Skus in details",
-                                                      sku2_property, variation["variation2"]["options"]["option"][0])
+                skus_under_description = process_tips(
+                    specifications,
+                    hasImage,
+                    i["price"],
+                    sku1_property,
+                    "Skus in details",
+                    sku2_property,
+                    variation["variation2"]["options"]["option"][0],
+                )
                 product_Skus["Sku"].append(skus_under_description)
                 variation["variation1"]["options"]["option"].append("Skus in details")
             else:
                 if sku_percentage["sku2_percentage"] > 0.2:
-                    skus_under_description = process_tips(specifications, hasImage, i["price"], sku1_property,
-                                                          variation["variation1"]["options"]["option"][0],
-                                                          sku2_property, "Skus in details")
+                    skus_under_description = process_tips(
+                        specifications,
+                        hasImage,
+                        i["price"],
+                        sku1_property,
+                        variation["variation1"]["options"]["option"][0],
+                        sku2_property,
+                        "Skus in details",
+                    )
                     product_Skus["Sku"].append(skus_under_description)
-                    variation["variation2"]["options"]["option"].append("Skus in details")
-            sku_transformation_list = sku1_transformation_list + sku2_transformation_list
+                    variation["variation2"]["options"]["option"].append(
+                        "Skus in details"
+                    )
+            sku_transformation_list = (
+                sku1_transformation_list + sku2_transformation_list
+            )
         return product_Skus, variation, sku_transformation_list
 
     def get_category_tree(self):
@@ -612,7 +809,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "access_token": self.access_token,
             "app_key": self.app_key,
             "sign_method": "sha256",
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
         url = self.build_url(parameters, "/category/tree/get")
         return self.perform_request(url, "post")
@@ -622,7 +819,7 @@ class DarazProduct(DarazBase, BaseCrawler):
         创建产品
         """
         if "status" not in self.category_attributes:
-            product_skus, variation, sku_transformation_list = self.assembly_skus()
+            product_Skus, variation, sku_transformation_list = self.assembly_skus()
             images = self.migrate_images(self.attrs.get("main_images"))
             if images:
                 json_product_data = {
@@ -630,7 +827,9 @@ class DarazProduct(DarazBase, BaseCrawler):
                         "Product": {
                             "PrimaryCategory": self.attrs.get("primary_category"),
                             "Images": {"Image": images},
-                            "Attributes": self.assembly_attributes(sku_transformation_list),
+                            "Attributes": self.assembly_attributes(
+                                sku_transformation_list
+                            ),
                             "Skus": product_Skus,
                         }
                     }
@@ -652,33 +851,70 @@ class DarazProduct(DarazBase, BaseCrawler):
                 for _ in range(6):
                     result = self.perform_request(url, "post", data=parameters)
                     if result["code"] == "0":
-                        return {"upload_site": self.upload_site, "upload_code": 0, "product_id": self.product_id,
-                                "data": "商品上传成功", "item_id": result["data"]["item_id"]}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": 0,
+                            "product_id": self.product_id,
+                            "data": "商品上传成功",
+                            "item_id": result["data"]["item_id"],
+                        }
                     elif result["code"] == "ApiCallLimit":
                         time.sleep(3)
                     elif result["code"] == "500":
-                        return {"upload_site": self.upload_site, "upload_code": -1, "product_id": self.product_id,
-                                "data": "商品上传出现状态码500错误"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -1,
+                            "product_id": self.product_id,
+                            "data": "商品上传出现状态码500错误",
+                        }
                     elif result["code"] == "IllegalAccessToken":
-                        return {"upload_site": self.upload_site, "upload_code": -2, "product_id": self.product_id,
-                                "data": "accesstoken错误"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -2,
+                            "product_id": self.product_id,
+                            "data": "accesstoken错误",
+                        }
                     elif result["code"] == "4221":
-                        return {"upload_site": self.upload_site, "upload_code": -3, "product_id": self.product_id,
-                                "data": "平台限制产品上传(可能违规)"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -3,
+                            "product_id": self.product_id,
+                            "data": "平台限制产品上传(可能违规)",
+                        }
                     elif result["code"] == "5":
-                        return {"upload_site": self.upload_site, "upload_code": -4, "product_id": self.product_id,
-                                "data": "数据包错误(异常请求)"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -4,
+                            "product_id": self.product_id,
+                            "data": "数据包错误(异常请求)",
+                        }
                     elif result["code"] == "209":
-                        return {"upload_site": self.upload_site, "upload_code": -9, "product_id": self.product_id,
-                                "data": "规格的长度超过50"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -9,
+                            "product_id": self.product_id,
+                            "data": "规格的长度超过50",
+                        }
                     else:
-                        return {"upload_site": self.upload_site, "upload_code": -5, "product_id": self.product_id,
-                                "data": "上传未知异常"}
+                        return {
+                            "upload_site": self.upload_site,
+                            "upload_code": -5,
+                            "product_id": self.product_id,
+                            "data": "上传未知异常",
+                        }
             else:
-                return {"upload_site": self.upload_site, "upload_code": -6, "product_id": self.product_id,
-                        "data": "商品主图出现304异常"}
-        return {"upload_site": self.upload_site, "upload_code": -7, "product_id": self.product_id,
-                "data": self.category_attributes["data"]}
+                return {
+                    "upload_site": self.upload_site,
+                    "upload_code": -6,
+                    "product_id": self.product_id,
+                    "data": "商品主图出现304异常",
+                }
+        return {
+            "upload_site": self.upload_site,
+            "upload_code": -7,
+            "product_id": self.product_id,
+            "data": self.category_attributes["data"],
+        }
 
     def get_product_list(self):
         """
@@ -705,7 +941,7 @@ class DarazProduct(DarazBase, BaseCrawler):
             "app_key": self.app_key,
             "sign_method": "sha256",
             "timestamp": self.timestamp,
-            "sku_id_list": json.dumps(sku_id_list)
+            "sku_id_list": json.dumps(sku_id_list),
         }
         url = self.build_url(parameters, "/product/remove")
         return self.request_function(url, "post")
@@ -728,7 +964,9 @@ class DarazPrice:
             order_handling_fee = 0.07  # usd
             final_freight_vat = 0.1  # usd
             payment_fee = 0.08  # 回款手续费
-            first_leg_cross_border_freight = 65 / usd_to_cny * weight if weight <= 0.15 else 80 / usd_to_cny * weight  # 头程跨境运费
+            first_leg_cross_border_freight = (
+                65 / usd_to_cny * weight if weight <= 0.15 else 80 / usd_to_cny * weight
+            )  # 头程跨境运费
         elif upload_site == "bd":
             acceptance_rate = 0.7  # 签收率
             dommission_rate = 0.089  # 产品佣金（类目）
@@ -736,19 +974,24 @@ class DarazPrice:
             order_handling_fee = 0.05  # usd
             final_freight_vat = 0.12  # usd
             payment_fee = 0.085  # 回款手续费
-            first_leg_cross_border_freight = 90 / usd_to_cny * weight if weight <= 0.15 else 95 / usd_to_cny * weight  # 头程跨境运费
+            first_leg_cross_border_freight = (
+                90 / usd_to_cny * weight if weight <= 0.15 else 95 / usd_to_cny * weight
+            )  # 头程跨境运费
         price = float(original_price)
         # 物流操作费
         logistics_operation_fee = 2 / usd_to_cny if weight <= 0.15 else 3.5 / usd_to_cny
         # 头程运费总计
-        total_first_leg_freight = first_leg_cross_border_freight + logistics_operation_fee
+        total_first_leg_freight = (
+            first_leg_cross_border_freight + logistics_operation_fee
+        )
         # 根据采购价计算利润
         profit = 10 if price <= 10 else price
         # 采购价 + 利润
         fod = (profit + price + label_fee + additional_fee_by_1688) / usd_to_cny
         # 美金售价
-        price_in_us_dollars = (total_first_leg_freight + fod + order_handling_fee + final_freight_vat) / (
-                1 - payment_fee - dommission_rate)
+        price_in_us_dollars = (
+            total_first_leg_freight + fod + order_handling_fee + final_freight_vat
+        ) / (1 - payment_fee - dommission_rate)
         # 当地售价
         price_in_pk_dollars = price_in_us_dollars * us_to_local
         # 最终售价
@@ -774,7 +1017,7 @@ class DarazMessages(DarazBase):
             "sign_method": "sha256",
             "timestamp": self.timestamp,
             "start_time": self.timestamp,
-            "page_size": "20"
+            "page_size": "20",
         }
         session_list = []
         url = self.build_url(parameters, "/im/session/list")
@@ -789,6 +1032,8 @@ class DarazMessages(DarazBase):
 
 
 if __name__ == "__main__":
-    daraz_product = DarazProduct("50000401a20jg2sqgXDCq9NvYkmIuJve1f79a538vTIiXAspFtOWpsrY8dGioe", "pk")
+    daraz_product = DarazProduct(
+        "50000401a20jg2sqgXDCq9NvYkmIuJve1f79a538vTIiXAspFtOWpsrY8dGioe", "pk"
+    )
     product_data = daraz_product.products_get()
     print(product_data)

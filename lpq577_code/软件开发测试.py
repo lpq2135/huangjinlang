@@ -1,9 +1,17 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QListWidget
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QTextEdit,
+    QPushButton,
+    QListWidget,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QTextCursor
+
 
 class ChatWindow(QMainWindow):
     def __init__(self):
@@ -30,7 +38,9 @@ class ChatWindow(QMainWindow):
 
         # 输入框
         self.input_box = QTextEdit()
-        self.input_box.setPlaceholderText("在此处输入消息内容，按回车键以发送消息，按 Ctrl + Enter 键执行")
+        self.input_box.setPlaceholderText(
+            "在此处输入消息内容，按回车键以发送消息，按 Ctrl + Enter 键执行"
+        )
         layout.addWidget(self.input_box)
 
         # 发送按钮
@@ -57,7 +67,10 @@ class ChatWindow(QMainWindow):
 
     def keyPressEvent(self, event):
         # 监听键盘事件
-        if event.key() == Qt.Key.Key_Return and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+        if (
+            event.key() == Qt.Key.Key_Return
+            and event.modifiers() == Qt.KeyboardModifier.ControlModifier
+        ):
             # Ctrl + Enter 换行
             self.input_box.insertPlainText("\n")
         elif event.key() == Qt.Key.Key_Return:

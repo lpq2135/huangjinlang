@@ -16,7 +16,9 @@ class Ui_Form(object):
         self.label = QtWidgets.QLabel(parent=Form)
         self.label.setGeometry(QtCore.QRect(0, 0, 1280, 720))
         self.label.setText("")
-        self.label.setPixmap(QtGui.QPixmap("../../../../../Desktop/应用程序开发/软件图片/软件封面.png"))
+        self.label.setPixmap(
+            QtGui.QPixmap("../../../../../Desktop/应用程序开发/软件图片/软件封面.png")
+        )
         self.label.setScaledContents(True)
         self.label.setObjectName("label")
         self.lineEdit = QtWidgets.QLineEdit(parent=Form)
@@ -35,15 +37,17 @@ class Ui_Form(object):
         self.lineEdit_2.setObjectName("lineEdit_2")
         self.loginButton = QtWidgets.QPushButton(parent=Form)
         self.loginButton.setGeometry(QtCore.QRect(1015, 527, 90, 57))
-        self.loginButton.setStyleSheet("QPushButton {\n"
-"    background-color: rgba(50, 150, 250, 0);\n"
-"    border: 1px solid rgb(50, 150, 250);\n"
-"    border-radius: 5px;\n"
-"    color: white;\n"
-"}\n"
-"QPushButton:hover {\n"
-"    background-color: rgba(50, 150, 250, 0.9);\n"
-"}")
+        self.loginButton.setStyleSheet(
+            "QPushButton {\n"
+            "    background-color: rgba(50, 150, 250, 0);\n"
+            "    border: 1px solid rgb(50, 150, 250);\n"
+            "    border-radius: 5px;\n"
+            "    color: white;\n"
+            "}\n"
+            "QPushButton:hover {\n"
+            "    background-color: rgba(50, 150, 250, 0.9);\n"
+            "}"
+        )
         self.loginButton.setText("")
         self.loginButton.setObjectName("loginButton")
 

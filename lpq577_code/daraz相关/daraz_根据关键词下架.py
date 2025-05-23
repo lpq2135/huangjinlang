@@ -11,24 +11,26 @@ def process_product_remove(daraz_product, sku_list, item_id):
     try:
         response = daraz_product.product_remove(sku_list)
         remove_data = response.json()
-        if remove_data['code'] == '0' or remove_data['code'] == '503':
-            logging.info(f'{item_id}-产品下架删除成功')
+        if remove_data["code"] == "0" or remove_data["code"] == "503":
+            logging.info(f"{item_id}-产品下架删除成功")
             return
     except Exception as e:
-        logging.error(f'{item_id}-处理过程中发生异常: {str(e)}')
+        logging.error(f"{item_id}-处理过程中发生异常: {str(e)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 初始化日志
     setup_logger()
 
-    daraz_product = DarazProduct('50000801f28eN4brfssXcigNk4HwvEDbESQgMRyu1c9f22e6mp0agxeKqAQFpy', 'pk')
+    daraz_product = DarazProduct(
+        "50000801f28eN4brfssXcigNk4HwvEDbESQgMRyu1c9f22e6mp0agxeKqAQFpy", "pk"
+    )
 
     while True:  # 主循环保持长期运行
         # 获取产品列表（带重试机制）
         while True:
             product_data = daraz_product.get_product_list()
-            if product_data['code'] == '0':
+            if product_data["code"] == "0":
                 break
             logging.warning("获取产品列表失败，3秒后重试...")
             time.sleep(3)
@@ -38,13 +40,13 @@ if __name__ == '__main__':
             futures = []
 
             # 遍历所有产品
-            for product in product_data['data']['products']:
-                item_id = str(product['item_id'])
+            for product in product_data["data"]["products"]:
+                item_id = str(product["item_id"])
 
                 # 生成SKU列表
                 sku_id_list = [
                     f"SkuId_{item_id}_{sku['ShopSku'].split('-')[1]}"
-                    for sku in product['skus']
+                    for sku in product["skus"]
                 ]
 
                 # 拆分SKU列表（假设split_list返回分块后的二维列表）
@@ -53,9 +55,6 @@ if __name__ == '__main__':
                 # 为每个SKU块提交任务到线程池
                 for chunk in sku_chunks:
                     future = executor.submit(
-                        process_product_remove,
-                        daraz_product,
-                        chunk,
-                        item_id
+                        process_product_remove, daraz_product, chunk, item_id
                     )
                     futures.append(future)

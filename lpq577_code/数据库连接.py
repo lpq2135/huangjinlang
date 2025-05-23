@@ -2,9 +2,12 @@ import mysql.connector
 import logging
 import time
 
+
 class MySqlPool:
     def __init__(self, **config):
-        self.pool = mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool", pool_size=20, **config)
+        self.pool = mysql.connector.pooling.MySQLConnectionPool(
+            pool_name="mypool", pool_size=20, **config
+        )
 
     def get_conn(self):
         """
@@ -16,7 +19,7 @@ class MySqlPool:
                 cursor = cnx.cursor(buffered=True)
                 return cnx, cursor
             except mysql.connector.Error as err:
-                logging.error(f'获取数据库连接池新连接失败， 错误信息: {err}')
+                logging.error(f"获取数据库连接池新连接失败， 错误信息: {err}")
                 time.sleep(2)
         raise err
 
@@ -29,7 +32,7 @@ class MySqlPool:
             try:
                 cursor.close()
             except Exception as e:
-                logging.error(f'关闭游标时发生错误: {str(e)}')
+                logging.error(f"关闭游标时发生错误: {str(e)}")
 
         # 关闭连接
         if cnx is not None:
@@ -38,5 +41,4 @@ class MySqlPool:
                     cnx.rollback()
                 cnx.close()
             except Exception as e:
-                logging.error(f'关闭数据库连接时发生错误: {str(e)}')
-
+                logging.error(f"关闭数据库连接时发生错误: {str(e)}")

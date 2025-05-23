@@ -40,6 +40,5 @@ import re
 # result = requests.get(img)
 # print(result.status_code)
 
-text = 'تحفہ－دارچینی چھوٹا سر کرسمس'
+text = "تحفہ－دارچینی چھوٹا سر کرسمس"
 print(len(text))
-

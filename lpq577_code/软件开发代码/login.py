@@ -35,18 +35,22 @@ class Ui_Form(object):
         self.label = QtWidgets.QLabel(parent=Form)
         self.label.setGeometry(QtCore.QRect(0, 0, initial_width, initial_height))
         self.label.setText("")
-        self.label.setPixmap(QtGui.QPixmap("../../../../../Desktop/应用程序开发/软件图片/软件封面.png"))
+        self.label.setPixmap(
+            QtGui.QPixmap("../../../../../Desktop/应用程序开发/软件图片/软件封面.png")
+        )
         self.label.setScaledContents(True)
         self.label.setObjectName("label")
 
         # 用户名输入框
         self.lineEdit = QtWidgets.QLineEdit(parent=Form)
-        self.lineEdit.setGeometry(QtCore.QRect(
-            int(initial_width * 0.63),  # 63%宽度处
-            int(initial_height * 0.36),  # 36%高度处
-            int(initial_width * 0.16),  # 16%宽度
-            int(initial_height * 0.06)  # 6%高度
-        ))
+        self.lineEdit.setGeometry(
+            QtCore.QRect(
+                int(initial_width * 0.63),  # 63%宽度处
+                int(initial_height * 0.36),  # 36%高度处
+                int(initial_width * 0.16),  # 16%宽度
+                int(initial_height * 0.06),  # 6%高度
+            )
+        )
         font = QtGui.QFont()
         font.setPointSize(12)
         self.lineEdit.setFont(font)
@@ -61,12 +65,14 @@ class Ui_Form(object):
 
         # 密码输入框
         self.lineEdit_2 = QtWidgets.QLineEdit(parent=Form)
-        self.lineEdit_2.setGeometry(QtCore.QRect(
-            int(initial_width * 0.63),
-            int(initial_height * 0.5),
-            int(initial_width * 0.16),
-            int(initial_height * 0.06)
-        ))
+        self.lineEdit_2.setGeometry(
+            QtCore.QRect(
+                int(initial_width * 0.63),
+                int(initial_height * 0.5),
+                int(initial_width * 0.16),
+                int(initial_height * 0.06),
+            )
+        )
         font = QtGui.QFont()
         font.setPointSize(12)
         self.lineEdit_2.setFont(font)
@@ -75,15 +81,17 @@ class Ui_Form(object):
 
         self.loginButton = QtWidgets.QPushButton(parent=Form)
         self.loginButton.setGeometry(QtCore.QRect(1015, 527, 90, 57))
-        self.loginButton.setStyleSheet("QPushButton {\n"
-                                       "    background-color: rgba(50, 150, 250, 0);\n"
-                                       "    border: 1px solid rgb(50, 150, 250);\n"
-                                       "    border-radius: 5px;\n"
-                                       "    color: white;\n"
-                                       "}\n"
-                                       "QPushButton:hover {\n"
-                                       "    background-color: rgba(50, 150, 250, 0.9);\n"
-                                       "}")
+        self.loginButton.setStyleSheet(
+            "QPushButton {\n"
+            "    background-color: rgba(50, 150, 250, 0);\n"
+            "    border: 1px solid rgb(50, 150, 250);\n"
+            "    border-radius: 5px;\n"
+            "    color: white;\n"
+            "}\n"
+            "QPushButton:hover {\n"
+            "    background-color: rgba(50, 150, 250, 0.9);\n"
+            "}"
+        )
         self.loginButton.setText("")
         self.loginButton.setObjectName("loginButton")
 
@@ -96,7 +104,9 @@ class Ui_Form(object):
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate
         Form.setWindowTitle(_translate("Form", "黄金浪电商管理系统"))
-        self.lineEdit.setPlaceholderText(_translate("Form", " 请输入您的账号"))  # 修改提示文字
+        self.lineEdit.setPlaceholderText(
+            _translate("Form", " 请输入您的账号")
+        )  # 修改提示文字
         self.lineEdit_2.setPlaceholderText(_translate("Form", " 请输入您的密码"))
 
     def resizeEvent(self, event):
@@ -107,29 +117,35 @@ class Ui_Form(object):
         self.label.setGeometry(QtCore.QRect(0, 0, size.width(), size.height()))
 
         # 调整输入框位置和大小（按比例）
-        self.lineEdit.setGeometry(QtCore.QRect(
-            int(size.width() * 0.63),
-            int(size.height() * 0.36),
-            int(size.width() * 0.16),
-            int(size.height() * 0.06)
-        ))
-        self.lineEdit_2.setGeometry(QtCore.QRect(
-            int(size.width() * 0.63),
-            int(size.height() * 0.5),
-            int(size.width() * 0.16),
-            int(size.height() * 0.06)
-        ))
+        self.lineEdit.setGeometry(
+            QtCore.QRect(
+                int(size.width() * 0.63),
+                int(size.height() * 0.36),
+                int(size.width() * 0.16),
+                int(size.height() * 0.06),
+            )
+        )
+        self.lineEdit_2.setGeometry(
+            QtCore.QRect(
+                int(size.width() * 0.63),
+                int(size.height() * 0.5),
+                int(size.width() * 0.16),
+                int(size.height() * 0.06),
+            )
+        )
 
         # 调整按钮位置和大小（按比例）
-        self.loginButton.setGeometry(QtCore.QRect(
-            int(size.width() * 0.793),  # 大约79%宽度处
-            int(size.height() * 0.735),  # 大约73%高度处
-            int(size.width() * 0.07),  # 7%宽度
-            int(size.height() * 0.08)  # 8%高度
-        ))
+        self.loginButton.setGeometry(
+            QtCore.QRect(
+                int(size.width() * 0.793),  # 大约79%宽度处
+                int(size.height() * 0.735),  # 大约73%高度处
+                int(size.width() * 0.07),  # 7%宽度
+                int(size.height() * 0.08),  # 8%高度
+            )
+        )
 
         # 调用父类的resizeEvent
-        if hasattr(super(), 'resizeEvent'):
+        if hasattr(super(), "resizeEvent"):
             super().resizeEvent(event)
 
 
