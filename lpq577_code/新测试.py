@@ -42,3 +42,4 @@ import re
 
 text = 'تحفہ－دارچینی چھوٹا سر کرسمس'
 print(len(text))
+

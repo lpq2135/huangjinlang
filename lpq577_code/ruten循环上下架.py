@@ -522,7 +522,8 @@ class RutenUpload(BaseCrawler):
         return response2['data']['class_id']
 
     # 处理标题
-    def process_title(self, title):
+    @staticmethod
+    def process_title(title):
         # title_prefix = ['【現貨免運】', '【公司貨】', '【嚴選好物】', '【可開發票】', '【好物優選】', '【口碑推薦】', '【銷售冠軍】', '【五星好評】', '【人氣爆款】', '【可刷卡】']
         if '【' and '】' in title:
             return title
@@ -581,7 +582,8 @@ class RutenUpload(BaseCrawler):
         return None
 
     # 构造multipart/form-data格式
-    def structure_multipart(self, json_data):
+    @staticmethod
+    def structure_multipart(json_data):
         boundary = 'WebKitFormBoundary' + ''.join(random.choices(string.ascii_letters + string.digits, k=16))
         form_data = ""
         for key, value in json_data.items():

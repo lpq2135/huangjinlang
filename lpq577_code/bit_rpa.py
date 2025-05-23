@@ -46,7 +46,7 @@ class Bit:
         res = requests.post(f'{self.local_url}{xpath_url}', data=json.dumps(data), headers=self.headers).json()
         return res
 
-    # 打开浏览器
+    # 打开浏览器鎵撳紑娴忚鍣?
     def open_browser(self, browser_id):
         xpath_url = '/browser/open'
         data = {

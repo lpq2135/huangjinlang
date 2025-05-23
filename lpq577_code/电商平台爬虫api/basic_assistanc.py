@@ -42,7 +42,7 @@ class BaseCrawler:
 
             except RequestException as e:
                 if hasattr(e, 'response') and e.response is not None:
-                    if e.response.status_code in (400, 401, 403, 404):
+                    if e.response.status_code in (400, 401, 404):
                         return e.response
                 logging.warning(f"请求错误 ({method}-{url}): {e}. 重试中... ({attempt + 1}/{max_retries})")
                 time.sleep(2 ** attempt)
