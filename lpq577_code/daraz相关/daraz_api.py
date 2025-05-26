@@ -41,12 +41,12 @@ class DarazBase:
         """
         生成API请求签名（HMAC-SHA256）
 
-        参数:
-            parameters: dict - 请求参数键值对
-            api_path: str - API接口路径
+        Args:
+            parameters: 请求参数键值对
+            api_path: API接口路径
 
-        返回:
-            str - 大写的16进制签名字符串
+        Returns:
+            大写的16进制签名字符串
         """
         # 1. 参数按字典序排序
         sort_dict = sorted(parameters)
@@ -70,12 +70,12 @@ class DarazBase:
         """
         构建完整的API请求URL（含签名）
 
-        参数:
-            parameters: dict - 请求参数
-            api_path: str - API接口路径
+        Args:
+            parameters: 请求参数
+            api_path: API接口路径
 
-        返回:
-            str - 完整的请求URL
+        Returns:
+            完整的请求URL
         """
         # 1. 对参数进行URL编码
         query_string = "&".join(
@@ -94,7 +94,9 @@ class DarazBase:
 
 
 class DarazProduct(DarazBase, BaseCrawler):
-    """daraz上货处理的相关代码"""
+    """
+    daraz上货处理的相关代码，基于daraz后台开放文档一系列的API
+    """
 
     def __init__(self, access_token=None, upload_site=None, attrs=None):
         super().__init__()
@@ -108,7 +110,15 @@ class DarazProduct(DarazBase, BaseCrawler):
         )   # 分类属性（延迟加载）
 
     def generate_access_token(self, code):
-        """生成access_token"""
+        """
+        通过code生成用来获取access_token
+
+        Args:
+            code: 店铺的申请代码，用来获取access_token
+
+        Returns:
+            店铺的相关参数，包扣ID和过期时间等等
+        """
         parameters = {
             "app_key": self.app_key,
             "app_secret": self.app_secret,
@@ -121,7 +131,16 @@ class DarazProduct(DarazBase, BaseCrawler):
         return response
 
     def upload_image(self, file_path, photo_name):
-        """上传本地图片"""
+        """
+        上传本地图片到daraz服务器
+
+        Args:
+            file_path: 文件路径
+            photo_name: 文件名
+
+        Returns:
+            上传后的daraz服务器的图片链接
+        """
         parameters = {
             "access_token": self.access_token,
             "app_key": self.app_key,
@@ -129,6 +148,8 @@ class DarazProduct(DarazBase, BaseCrawler):
             "timestamp": self.timestamp,
         }
         url = self.build_url(parameters, "/image/upload")
+
+        # 打开文件（二进制模式）
         with open(file_path, "rb") as f:
             files = {"image": (photo_name, f)}
             try:
@@ -139,41 +160,45 @@ class DarazProduct(DarazBase, BaseCrawler):
                 logging.warning(f"daraz本地图片上传失败: {e}")
 
     def migrate_images(self, images):
-        """一次性上传多张网络图片"""
-        retry = 0
-        while True:
-            photo_data = {"Request": {"Images": {"Url": images}}}
-            xml_photo_data = xmltodict.unparse(photo_data)
-            parameters = {
-                "payload": xml_photo_data,
-                "access_token": self.access_token,
-                "app_key": self.app_key,
-                "sign_method": "sha256",
-                "timestamp": self.timestamp,
-            }
-            url = self.build_url(parameters, "/images/migrate")
-            try:
-                response = self.request_function(url, "post")
-                batch_id = response["batch_id"]
-                result = self.image_response_get(batch_id)
-                if result["status_code"] == 0:
-                    logging.info(
-                        f"{self.product_id}-{self.upload_site}-图片上传daraz服务器成功"
-                    )
-                    return result["data"]
-                elif result["status_code"] == 1:
-                    retry += 1
-                    time.sleep(2)
-                    logging.warning(
-                        f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次"
-                    )
-                elif result["status_code"] == 2:
-                    return None
-            except Exception:
-                retry += 1
-                logging.warning(
-                    f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次"
-                )
+        """
+        一次性上传多张图片至daraz服务器
+
+        Args:
+            images: 图片列表
+
+        Returns:
+
+        """
+        photo_data = {"Request": {"Images": {"Url": images}}}
+
+        # 将photo_data的json数据转化成xml格式
+        xml_photo_data = xmltodict.unparse(photo_data)
+        parameters = {
+            "payload": xml_photo_data,
+            "access_token": self.access_token,
+            "app_key": self.app_key,
+            "sign_method": "sha256",
+            "timestamp": self.timestamp,
+        }
+        url = self.build_url(parameters, "/images/migrate")
+        response = self.request_function(url, "post")
+
+        # 获取batch_id用于获取图片的响应
+        batch_id = response["batch_id"]
+        result = self.image_response_get(batch_id)
+        if result["status_code"] == 0:
+            logging.info(
+                f"{self.product_id}-{self.upload_site}-图片上传daraz服务器成功"
+            )
+            return result["data"]
+        elif result["status_code"] == 1:
+            retry += 1
+            time.sleep(2)
+            logging.warning(
+                f"{self.product_id}-{self.upload_site}-daraz网络图片重新获取, 重试第{retry}次"
+            )
+        elif result["status_code"] == 2:
+            return None
 
     def migrate_image(self, images):
         """上传单张网络图片"""
@@ -294,45 +319,6 @@ class DarazProduct(DarazBase, BaseCrawler):
                 )
                 time.sleep(2)
         return None
-
-    def check_sku(self, specifications):
-        """
-        遍历检查sku长度进行进一步处理
-        计算单规格和双规格中字符串长度>20的数据个数占总长度的百分比
-        :return:包含百分比的字典
-        """
-        total_len_over_20_sku1, total_len_over_20_sku2 = 0, 0
-        unique_sku1, unique_sku2 = set(), set()
-        result = dict()
-        for i in self.attrs.get("skumodel")["sku_data"]["sku_parameter"]:
-            i["name"] = (
-                (re.sub(r"\s{2,}", " ", re.sub(r"\(.*?\)", "", i["name"]))).replace(
-                    "~", "-"
-                )
-            ).replace(" kg", "kg")
-            if specifications == 1:
-                unique_sku1.add(i["name"])
-                total_len_over_20_sku1 += len(i["name"]) > 20
-
-            elif specifications == 2:
-                sku1, sku2 = map(str.strip, i["name"].split("||"))
-                unique_sku1.add(sku1)
-                unique_sku2.add(sku2)
-                total_len_over_20_sku1 += len(sku1) > 20
-                total_len_over_20_sku2 += len(sku2) > 20
-
-        if specifications == 1:
-            result["sku1_percentage"] = (
-                total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
-            )
-        elif specifications == 2:
-            result["sku1_percentage"] = (
-                total_len_over_20_sku1 / len(unique_sku1) if unique_sku1 else 0
-            )
-            result["sku2_percentage"] = (
-                total_len_over_20_sku2 / len(unique_sku2) if unique_sku2 else 0
-            )
-        return result
 
     def assembly_attributes(self, sku_transformation_list):
         """
