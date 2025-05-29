@@ -6,7 +6,7 @@ import 图鉴打码
 import re
 import math
 import logging
-import translate_google_api
+from lpq577_code.文本翻译 import translate_google_api
 
 from logging_config import setup_logger
 from opencc import OpenCC

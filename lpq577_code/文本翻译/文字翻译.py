@@ -2,14 +2,17 @@ import requests
 import re
 import hashlib
 import logging
+import ast
+from googletrans import Translator
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 
-class Translator:
+class Translators:
     def __init__(self, data=None, deepl_api=None):
         self.data = data
         self.deepl_api = deepl_api
+        self.translator = Translator()
 
     def translate_text_with_sougou(self, text, translate_to="en"):
         headers = {
@@ -89,6 +92,21 @@ class Translator:
                 logging.warning(f"deepl翻译请求失败，尝试第{attempt}次. Error: {e}")
             attempt += 1
         raise Exception("deepl翻译请求失败")
+
+    def translate_text_with_google(self, text):
+        # 对 text 进行格式化处理
+        for i in range(len(text)):
+            value = self.replace_brackets(text[i])
+            value = self.format_text(value)
+            text[i] = value
+
+        while True:
+            try:
+                translation = self.translator.translate(f"{text}", src='zh-cn', dest='en')
+                result = ast.literal_eval(translation.text)
+                return result
+            except Exception as e:
+                logging.warning("googletrans发生错误:", e)
 
     def remove_last_dot(self, str):
         """
@@ -267,7 +285,7 @@ class Translator:
             sub_lists = self.split_list(list(text_list))
             text_lists = []
             for sub_list in sub_lists:
-                text_lists.extend(self.translate_text_with_deepl(sub_list))
+                text_lists.extend(self.translate_text_with_google(sub_list))
 
             count = 1
             for key in sku_data["sku_property_name"].keys():
@@ -301,8 +319,8 @@ class Translator:
                     )
 
     def process_title(self):
-        title = self.translate_text_with_deepl([self.data["title"]])
-        title = self.format_title(title[0]).replace(",", "")
+        title = self.translate_text_with_google([self.data["title"]])
+        title = self.format_title(ast.literal_eval(title)[0]).replace(",", "")
         self.data["title"] = title
 
     def process_details_text_description(self):
@@ -316,7 +334,7 @@ class Translator:
         text_lists = []
         new_text_lists = []
         for sub_list in sub_lists:
-            text_lists.extend(self.translate_text_with_deepl(sub_list))
+            text_lists.extend(self.translate_text_with_google(sub_list))
         for i in range(len(text_lists)):
             if self.is_chinese(text_lists[i]) or (text_lists[i]).count(",") >= 4:
                 continue
@@ -831,7 +849,6 @@ if __name__ == "__main__":
             ],
         },
     }
-    deepl_api = "eaffb79e-edf7-447a-a76e-3e6ae3883e21"
-    translator_deepl = Translator(tetx["data"], deepl_api)
+    translator_deepl = Translators(tetx["data"])
     res = translator_deepl.process_all()
     print(tetx)

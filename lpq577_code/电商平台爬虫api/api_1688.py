@@ -9,7 +9,8 @@ import logging
 from PIL import Image
 from bs4 import BeautifulSoup
 from io import BytesIO
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
+from lpq577_code.电商平台爬虫api.basic_assistanc import BaseCrawler
+
 
 # from basic_assistanc import BaseCrawler
 
@@ -177,7 +178,7 @@ class Alibaba(BaseCrawler):
         # app端
         data = self.first_non_empty_item_in_data("propsList")
         if data is not None:
-            Filter_words = [
+            filter_words = [
                 "专利",
                 "跨境",
                 "货号",
@@ -196,12 +197,10 @@ class Alibaba(BaseCrawler):
                 "代理",
                 "售后",
             ]
-            attribute_list = [
-                (f"{x['name']} : {x['value']}")
-                for x in data["propsList"]
-                if all(word not in x["name"] for word in Filter_words)
-                and x["value"] != "/"
-            ]
+            attribute_list = [(f"{x['name']} : {x['value']}") for x in data["propsList"]
+                              if all(word not in x["name"] for word in filter_words)
+                              and x["value"] != "/"
+                              ]
             return attribute_list
         return None
 
@@ -220,7 +219,10 @@ class Alibaba(BaseCrawler):
         """开始组装数据包"""
         self.source = self.get_data_packet_by_1688()
         if self.source:
+            # 获取主图列表
             main_images = self.get_main_images()
+
+            # 如果主图列表为空，则主图异常
             if len(main_images) == 0:
                 return {
                     "platform": "1688",
@@ -228,38 +230,34 @@ class Alibaba(BaseCrawler):
                     "message": "主图异常",
                     "product_id": self.product_id,
                 }
+
+            # 主图正常
             if len(main_images) != 0:
                 # 获取 skuProps 的参数
-                skuProps = self.source["globalData"]["skuModel"].get("skuProps", [])
+                sku_props = self.source["globalData"]["skuModel"].get("skuProps", [])
                 # 规格数为 0
-                if not skuProps:
+                if not sku_props:
                     specifications = 0
                     stock = random.randint(900, 1000)
-                    if (
-                        "skuRangePrices"
-                        not in self.source["globalData"]["orderParamModel"][
-                            "orderParam"
-                        ]["skuParam"]
-                    ):
+                    if "skuRangePrices" not in self.source["globalData"]["orderParamModel"]["orderParam"]["skuParam"]:
                         return {
                             "platform": "1688",
                             "code": 4,
                             "message": "商品数据包异常",
                             "product_id": self.product_id,
                         }
-                    price = self.source["globalData"]["orderParamModel"]["orderParam"][
-                        "skuParam"
-                    ]["skuRangePrices"][0]["price"]
+                    # 设置sku_has_image状态
+                    sku_has_image = True
+                    # 获取价格
+                    price = self.source["globalData"]["orderParamModel"]["orderParam"]["skuParam"]["skuRangePrices"][0]["price"]
+                    # 组装sku_assembly
                     sku_assembly = {"sku_data": {"price": price, "stock": stock}}
 
                 # 规格数为 1
-                elif len(skuProps) == 1:
+                elif len(sku_props) == 1:
                     specifications = 1
-                    # 判断 prop 键是否存在
-                    if (
-                        "prop"
-                        not in self.source["globalData"]["skuModel"]["skuProps"][0]
-                    ):
+                    # 判断prop键是否存在
+                    if "prop" not in self.source["globalData"]["skuModel"]["skuProps"][0]:
                         return {
                             "platform": "1688",
                             "code": 4,
@@ -267,9 +265,7 @@ class Alibaba(BaseCrawler):
                             "product_id": self.product_id,
                         }
                     # 判获取 sku1 的名称
-                    sku1_property_name = self.source["globalData"]["skuModel"][
-                        "skuProps"
-                    ][0]["prop"].replace("产品", "")
+                    sku1_property_name = self.source["globalData"]["skuModel"]["skuProps"][0]["prop"].replace("产品", "")
 
                     # 组装 sku_assembly
                     sku_assembly = {
@@ -283,6 +279,8 @@ class Alibaba(BaseCrawler):
                     # 获取 sku_props 和 sku_maps 数据包
                     sku_props = self.source["globalData"]["skuModel"]["skuProps"]
                     sku_maps = self.source["globalData"]["skuModel"]["skuInfoMap"]
+
+                    # 通过sku_props判断商品包是否异常
                     if sku_props[0]["value"] == [{}]:
                         return {
                             "platform": "1688",
@@ -290,6 +288,7 @@ class Alibaba(BaseCrawler):
                             "message": "商品数据包异常",
                             "product_id": self.product_id,
                         }
+
                     # 遍历数据 sku1 的详细参数
                     for i in sku_props[0]["value"]:
                         if "name" not in i:
@@ -300,32 +299,30 @@ class Alibaba(BaseCrawler):
                                 "product_id": self.product_id,
                             }
                         sku_value = i["name"]
-                        imageUrl = i.get("imageUrl", None)
+                        image_url = i.get("imageUrl", None)
                         if sku_value in sku_maps:
                             price = (
-                                sku_maps[sku_value].get("discountPrice")
-                                or sku_maps[sku_value].get("price")
-                                or self.get_current_price()
+                                    sku_maps[sku_value].get("discountPrice")
+                                    or sku_maps[sku_value].get("price")
+                                    or self.get_current_price()
                             )
                             skus = {
-                                "remote_id": self.product_id
-                                + "_"
-                                + self.generate_random_string(10),
+                                "remote_id": self.product_id + "_" + self.generate_random_string(10),
                                 "name": sku_value,
-                                "imageUrl": imageUrl,
+                                "imageUrl": image_url,
                                 "price": price,
                                 "stock": random.randint(900, 1000),
                             }
                             sku_assembly["sku_data"]["sku_parameter"].append(skus)
 
+                    # 设置sku_has_image状态
+                    sku_has_image = True if image_url else False
+
                 # 规格数为 2
-                elif len(skuProps) == 2:
+                elif len(sku_props) == 2:
                     specifications = 2
                     # 判断 prop 键是否存在
-                    if (
-                        "prop"
-                        not in self.source["globalData"]["skuModel"]["skuProps"][1]
-                    ):
+                    if "prop" not in self.source["globalData"]["skuModel"]["skuProps"][1]:
                         return {
                             "platform": "1688",
                             "code": 4,
@@ -333,13 +330,11 @@ class Alibaba(BaseCrawler):
                             "product_id": self.product_id,
                         }
                     # 获取 sku1 的名称
-                    sku1_property_name = self.source["globalData"]["skuModel"][
-                        "skuProps"
-                    ][0]["prop"].replace("产品", "")
+                    sku1_property_name = self.source["globalData"]["skuModel"]["skuProps"][0]["prop"].replace("产品",
+                                                                                                              "")
                     # 获取 sku2 的名称
-                    sku2_property_name = self.source["globalData"]["skuModel"][
-                        "skuProps"
-                    ][1]["prop"].replace("产品", "")
+                    sku2_property_name = self.source["globalData"]["skuModel"]["skuProps"][1]["prop"].replace("产品",
+                                                                                                              "")
                     # 获取 sku_props 和 sku_maps 数据包
                     sku_props = self.source["globalData"]["skuModel"]["skuProps"]
                     sku_maps = self.source["globalData"]["skuModel"]["skuInfoMap"]
@@ -355,25 +350,28 @@ class Alibaba(BaseCrawler):
                     }
                     # 遍历数据 sku1 和sku2 的详细参数
                     for i in sku_props[0]["value"]:
+                        image_url = i.get("imageUrl", None)
                         for j in sku_props[1]["value"]:
                             sku_value = i["name"] + "&gt;" + j["name"]
                             if sku_value in sku_maps:
                                 price = (
-                                    sku_maps[sku_value].get("discountPrice")
-                                    or sku_maps[sku_value].get("price")
-                                    or self.get_current_price()
+                                        sku_maps[sku_value].get("discountPrice")
+                                        or sku_maps[sku_value].get("price")
+                                        or self.get_current_price()
                                 )
                                 skus = {
-                                    "remote_id": self.product_id
-                                    + "_"
-                                    + self.generate_random_string(10),
+                                    "remote_id": self.product_id + "_" + self.generate_random_string(10),
                                     "name": i["name"] + "||" + j["name"],
-                                    "imageUrl": i.get("imageUrl", None),
+                                    "imageUrl": image_url,
                                     "price": price,
                                     "stock": random.randint(900, 1000),
                                 }
                                 sku_assembly["sku_data"]["sku_parameter"].append(skus)
 
+                    # 设置sku_has_image状态
+                    sku_has_image = True if image_url else False
+
+                #
                 else:
                     return {
                         "platform": "1688",
@@ -381,6 +379,7 @@ class Alibaba(BaseCrawler):
                         "message": "sku规格数超出",
                         "product_id": self.product_id,
                     }
+
                 # 组装数据包
                 product_package = {
                     "product_id": self.product_id,
@@ -393,7 +392,12 @@ class Alibaba(BaseCrawler):
                     "video": self.get_video(),
                     "details_text_description": self.get_product_attribute(),
                     "detailed_picture": self.get_detail_images(),
+                    "other_parameters": {
+                        "sku_has_image": sku_has_image,
+                    }
                 }
+
+                # 返回数据包
                 return {
                     "platform": "1688",
                     "code": 0,

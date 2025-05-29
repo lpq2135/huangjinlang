@@ -939,6 +939,17 @@ class DarazPrice:
     def calculate_local_price(self, upload_site, original_price, weight):
         """
         根据站点进行定价计算
+
+        Args:
+            upload_site: 上传站点
+            original_price: 原始价格
+            weight: 重量
+
+        Returns:
+            计算后的当地货币的价格
+        """
+        """
+        根据站点进行定价计算
         """
         usd_to_cny = 7.14  # 美元-人民币汇率
         label_fee = 2.5  # 贴单
@@ -984,6 +995,8 @@ class DarazPrice:
         final_price_in_pk_dollars = price_in_pk_dollars / acceptance_rate
 
         return int(final_price_in_pk_dollars)
+
+
 
 
 class DarazMessages(DarazBase):

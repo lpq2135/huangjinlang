@@ -2,20 +2,35 @@ import copy
 import logging
 import sys
 import time
+from lpq577_code.数据库连接 import MySqlPool
+from lpq577_code.logging_config import setup_logger
 from lpq577_code.daraz相关 import daraz_api
-import datetime
-
+from lpq577_code.电商平台爬虫api.api_1688 import Alibaba
+from lpq577_code.文本翻译.文字翻译 import Translator
 from collections import defaultdict
 from itertools import cycle
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-
-# 获取店铺的 access_token 和其他相关信息
 def get_access_token():
-    """获取店铺的 access_token 和其他相关信息"""
-    cnx, cursor = mysql_pool.get_conn()
+    """
+    获取店铺的access_token和相关店铺信息。
+
+    从数据库查询指定账号的access_token、国家、用户ID和邮箱等信息，
+    并通过access_token_deal_with函数处理后返回。
+
+    Returns:
+        dict or None: 返回处理后的access_token字典，结构为：
+            {
+                'access_token': str,
+                'country': str,
+                'user_id': str,
+                'email': str
+            }
+            如果查询无结果或出错则返回None
+    """
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             "SELECT access_token, country, user_id, email FROM daraz_store_internal_parameters WHERE status = 0 AND application_category = 'erp' AND account = %s",
             (account,),
@@ -30,30 +45,46 @@ def get_access_token():
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
+def get_product_data(sort_order='ASC'):
+    """
+    获取待处理的商品数据（按product_id排序）
 
-# 获取待处理的商品数据
-def get_product_data():
-    """获取待处理的商品数据"""
-    cnx, cursor = mysql_pool.get_conn()
+    从指定账号的product_id去重表中查询状态为'0'的商品数据，
+    并按product_id升序或降序返回限定数量的记录。
+
+    Args:
+        sort_order (str): 排序方式，可选值：
+            - 'ASC'  : 按product_id升序排列（默认）
+            - 'DESC' : 按product_id降序排列
+
+    Returns:
+        Optional[list]: 返回查询结果列表，每行是一个商品记录字典；
+                       如果查询无结果或出错则返回None
+    """
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f"product_id_deduplication_by_{account}"
         query = (
-            f"SELECT * FROM {table_name} WHERE status = '0' ORDER BY RAND() LIMIT 500"
+            f"SELECT * FROM {table_name} WHERE status = '0' ORDER BY product_id {sort_order} LIMIT 500"
         )
         cursor.execute(query)
         rows = cursor.fetchall()
-        return None if not rows else rows
+        return rows if rows else None
     except Exception as e:
-        logging.warning("获取商品数据异常: %s", str(e))
+        logging.warning(f"获取商品数据异常(account={account}): {str(e)}")
         return None
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-
-# 更新商品状态，标记为已处理
 def update_product_status(product_id):
-    cnx, cursor = mysql_pool.get_conn()
+    """
+    更新指定商品在去重表中的状态
+
+    Args:
+        product_id (str): 要更新的商品ID
+    """
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f"product_id_deduplication_by_{account}"  # 构建完整的表名
         query = f"UPDATE {table_name} SET status = '1' WHERE product_id = %s"
         cursor.execute(query, (product_id,))
@@ -66,14 +97,23 @@ def update_product_status(product_id):
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-
-# 记录商品上传状态
 def record_product_status(upload_info):
-    """记录商品上传状态"""
-    # 从数据库连接池中获取连接和游标对象
-    cnx, cursor = mysql_pool.get_conn()
+    """
+    记录商品上传状态
 
+    Args:
+        upload_info(dict):
+            - platform (str): 平台名称， 默认1688
+            - email (str): 店铺邮箱
+            - product_id (str): 商品id
+            - upload_site (str): 上传站点
+            - product_id (str): 商品id
+            - upload_code (str): 上传状态码
+            - data (str): 上架状态说明
+    """
     try:
+        cnx, cursor = mysql_pool.get_conn()
+
         # 提取字典中的字段，使用get方法来避免键不存在时抛出异常
         platform = upload_info.get("platform")
         email = upload_info.get("email")
@@ -85,7 +125,9 @@ def record_product_status(upload_info):
             if "message" not in upload_info.get("data")[0]
             else "上架包数据异常"
         )
-        item_id = upload_info.get("item_id", None)  # 如果 item_id 不存在，使用 None
+
+        # 如果 item_id 不存在，使用 None
+        item_id = upload_info.get("item_id", None)
 
         # 获取当前时间，格式化为字符串（YYYY-MM-DD HH:MM:SS）
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -128,14 +170,18 @@ def record_product_status(upload_info):
         cnx.rollback()  # 回滚事务，避免无效或部分更新的数据
 
     finally:
-        # 关闭数据库连接和游标
         mysql_pool.close_mysql(cnx, cursor)
 
-
-# 记录1688异常产品
 def record_1688_error(product_id, mark):
-    cnx, cursor = mysql_pool.get_conn()
+    """
+    记录1688的异常产品，方便排查代码
+
+    Args:
+        product_id: 商品id
+        mark: 商品标记
+    """
     try:
+        cnx, cursor = mysql_pool.get_conn()
         cursor.execute(
             "INSERT INTO 1688_error (product_id, mark) VALUES (%s, %s)",
             (product_id, mark),
@@ -149,13 +195,15 @@ def record_1688_error(product_id, mark):
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-
 def get_available_id_count():
     """
-    获取指定accunt的象寄密匙数量
+    获取指定accunt的商品id数量
+
+    Returns:
+        独赢account数据库的商品数量
     """
-    cnx, cursor = mysql_pool.get_conn()
     try:
+        cnx, cursor = mysql_pool.get_conn()
         table_name = f"product_id_deduplication_by_{account}"
         query = f"SELECT COUNT(*) FROM {table_name} WHERE status = '0'"
         cursor.execute(query)
@@ -170,31 +218,20 @@ def get_available_id_count():
     finally:
         mysql_pool.close_mysql(cnx, cursor)
 
-
-def get_deepl_api():
-    """
-    获取指定accunt的deepl密匙
-    """
-    cnx, cursor = mysql_pool.get_conn()
-    try:
-        cursor.execute(
-            "SELECT deepl_api FROM deepl_api WHERE account = %s AND status = '0'",
-            (account,),
-        )
-        row = cursor.fetchone()[0]
-        if row is None:
-            logging.warning("数据库无象寄翻译密匙")
-            return
-        else:
-            return row
-    except Exception as e:
-        logging.warning("象寄数据库获取数据异常: ", str(e))
-    finally:
-        mysql_pool.close_mysql(cnx, cursor)
-
-
-# 处理数据库中获取的多行数据，返回以 user_id 为键的字典
 def access_token_deal_with(rows):
+    """
+    处理数据库中获取的多行数据，返回以user_id为键的字典
+
+    Args:
+        rows (list): 数据库查询的原始结果集，每行包含：
+            - row[0]: access_token
+            - row[1]: country (国家代码)
+            - row[2]: user_id
+            - row[3]: email
+
+    Returns:
+        dict: 结构为 {user_id: [[access_token, country, email], ...]} 的字典
+    """
     my_dict = defaultdict(list)
     for row in rows:
         if row[1] == "bd":
@@ -202,13 +239,14 @@ def access_token_deal_with(rows):
         my_dict[row[2]].append([row[0], row[1], row[3]])
     return dict(my_dict)
 
-
 # 处理每个商品的具体任务
 def process_product(value, product_data, stop_event):
+    # 检测停止信号，终止任务执行
     if stop_event.is_set():
         logging.info("检测到停止事件，终止任务执行")
         return
 
+    # 获取product_id
     product_id = product_data[2]
     # 使用 Alibaba 类来处理商品数据
     logging.info(f"{product_id}-获取成功-开始请求数据包")
@@ -220,9 +258,15 @@ def process_product(value, product_data, stop_event):
         record_1688_error(product_id, "0")
         return
 
-    # 如果数据包构建失败，更新商品状态并返回
-    if not product_package["status"]:
+    # 记录异常的1688商品id
+    if product_package["code"] != 0:
         logging.warning(f'{product_id}-{product_package["data"]}')
+        update_product_status(product_id)
+        return
+
+    # 判断sku是否有规格图
+    if not product_package["data"]["other_parameters"]["sku_has_image"]:
+        logging.warning(f'{product_id}-"sku主图缺失"')
         update_product_status(product_id)
         return
 
@@ -235,52 +279,27 @@ def process_product(value, product_data, stop_event):
         weight = min(float(unit_weight), mysql_weight)
 
     # 创建daraz价格类的实例
-    daraz_price = daraz_api.DarazPrice()
-    if len(value) == 1 and value[0][1] == "pk":
-        skumodel_temporary = copy.deepcopy(product_package["data"]["skumodel"])
-        pk_processing_price = daraz_price.processing_price(
-            "pk", skumodel_temporary, weight
-        )
-        # 判断数据包价格是否符合要求
-        if pk_processing_price is False:
-            logging.warning(f"{product_id}-{value[0][1]}-数据包价格不符合要求")
-            update_product_status(product_id)
-            return
-
-    logging.info(f"{product_id}-开始文字翻译数据包")
+    # daraz_price = daraz_api.DarazPrice()
+    # if len(value) == 1 and value[0][1] == "pk":
+    #     skumodel_temporary = copy.deepcopy(product_package["data"]["skumodel"])
+    #     pk_processing_price = daraz_price.processing_price(
+    #         "pk", skumodel_temporary, weight
+    #     )
+    #     # 判断数据包价格是否符合要求
+    #     if pk_processing_price is False:
+    #         logging.warning(f"{product_id}-{value[0][1]}-数据包价格不符合要求")
+    #         update_product_status(product_id)
+    #         return
+    #
+    # logging.info(f"{product_id}-开始文字翻译数据包")
 
     # 使用 Translator 类进行文字翻译
-    text_translator = Translator(product_package["data"], deepl_api)
+    text_translator = Translator(product_package["data"])
     data_packet_translate = text_translator.process_all()
 
     if data_packet_translate:
         # 主图
         main_images = data_packet_translate["main_images"]
-
-        # 判断是否需要进行主图翻译
-        if is_img_translate == "0":
-            logging.info(f"{product_id}-主图不进行象寄api翻译")
-        else:
-            logging.info(f"{product_id}-主图开始进行象寄api翻译")
-            image_frist = img_translate.get_image_link(product_id)
-            if image_frist:
-                main_images[0] = image_frist
-            else:
-                images_data = img_translate.xiangji_image_translate(
-                    main_images, 1, product_id
-                )
-
-            # 如果象寄翻译返回为空，停止后续线程任务
-            if images_data["status_code"] == 1:
-                logging.warning(f"{product_id}-象寄翻译返回为空, 停止继续启动新的线程")
-                stop_event.set()  # 设置停止事件，通知其他线程停止
-                return
-            elif images_data["status_code"] == 2:
-                logging.warning(f"{product_id}-主图出现304异常，跳过")
-                update_product_status(product_id)
-                return
-            else:
-                main_images = images_data["images"]
 
         attrs = {
             "primary_category": product_data[3],
@@ -353,19 +372,11 @@ mysql_pool = MySqlPool(
 app_key = "502742"
 app_secret = "0XGyiUMf0obAP9FueDD16fid4M5xgmaV"
 
-# 设置日志配置
-logging_config.setup_logger()
 
 # 主程序
 if __name__ == "__main__":
     account = input("请输入你的account: ")
-    is_img_translate = input("请输入主图翻译选项(0:不开启主图翻译; 1:开启主图翻译): ")
-    # 获取对应account的deepl_api
-    deepl_api = get_deepl_api()
-    if not deepl_api:
-        logging.error("数据库可用对应accoun的deepl_api")
-        time.sleep(5)
-        sys.exit()
+
     # 获取对应account的数据库id数量
     available_id_count = get_available_id_count()
     if not available_id_count:
@@ -381,31 +392,27 @@ if __name__ == "__main__":
         time.sleep(5)
         sys.exit()
 
-    max_workers = min(20, len(access_token_data))  # 最大线程数
+    # 最大线程数
+    # max_workers = min(20, len(access_token_data))  # 最大线程数
+    max_workers = 1
     logging.info(f"当前工作线程数量：{max_workers}")
 
-    if is_img_translate == 1:
-        # 创建 XiangJi 实例
-        img_translate = XiangJi(account, mysql_pool)
-        xiangji_count = img_translate.get_xiangji_key_count()
-        if xiangji_count > 0:
-            logging.info(f"当前象寄密匙数量: {xiangji_count}")
-        else:
-            logging.info(f"当前象寄密匙数量: {xiangji_count}, 终止启动")
-            time.sleep(5)
-            sys.exit()
+    # 创建access_token的无限迭代器
+    access_token_cycle = cycle(access_token_data.values())  # 创建access_token的无限迭代器
 
-    access_token_cycle = cycle(
-        access_token_data.values()
-    )  # 创建access_token的无限迭代器
-    stop_event = Event()  # 假设的停止事件
+    # 假设的停止事件
+    stop_event = Event()
+
+    # 创建主线程池
     main_pool = ThreadPoolExecutor(max_workers=max_workers)  # 主线程池
 
     while True:
         tasks = []  # 存储任务的列表
         product_data_list = get_product_data()
+
+        # 如果没有数据了，就结束循环
         if not product_data_list:
-            break  # 如果没有数据了，就结束循环
+            break
 
         # 每次循环时逐个提交任务
         for product_data in product_data_list:
@@ -418,7 +425,7 @@ if __name__ == "__main__":
         # 逐个等待任务，并设置超时
         for task in tasks:
             try:
-                task.result(timeout=150)  # 每个任务最多等待 150 秒
+                task.result()
             except TimeoutError:
                 logging.error(f"任务超时，跳过该任务: {task}")
             except Exception as e:
