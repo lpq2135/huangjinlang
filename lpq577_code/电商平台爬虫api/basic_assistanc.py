@@ -1,15 +1,13 @@
-import requests
+import logging
+import os
 import random
 import string
-import logging
-import time
-import os
-import io
 import sys
+import time
 
-from urllib.parse import urlparse, urlunparse
+import requests
+from PIL import Image
 from opencc import OpenCC
-from PIL import Image, ImageEnhance
 from requests.exceptions import ReadTimeout, RequestException
 
 

@@ -1,19 +1,12 @@
 import json
-import time
-import requests
-import re
-import random
-import string
 import logging
+import random
+import re
+from io import BytesIO
 
 from PIL import Image
 from bs4 import BeautifulSoup
-from io import BytesIO
-from lpq577_code.电商平台爬虫api.basic_assistanc import BaseCrawler
-
-
-# from basic_assistanc import BaseCrawler
-
+from .basic_assistanc import BaseCrawler
 
 class Alibaba(BaseCrawler):
     """

@@ -81,8 +81,8 @@ class TaoBao(BaseCrawler):
 
     def get_price_map(self):
         """获取sku价格数据包"""
-        umpPriceLogVO = self.data["data"]["componentsVO"]["umpPriceLogVO"]["map"]
-        return ast.literal_eval(umpPriceLogVO)
+        ump_price_log_vO = self.data["data"]["componentsVO"]["umpPriceLogVO"]["map"]
+        return ast.literal_eval(ump_price_log_vO)
 
     def get_product_attribute(self):
         """获取详情文字"""
@@ -211,9 +211,3 @@ class TaoBao(BaseCrawler):
             "message": "请求成功",
             "data": product_package,
         }
-
-
-if __name__ == "__main__":
-    taobao = TaoBao()
-    res = taobao.build_product_package()
-    print(res)

@@ -1,3 +1,5 @@
+import sys
+import os
 import requests
 import base64
 import gzip
@@ -6,19 +8,18 @@ import 图鉴打码
 import re
 import math
 import logging
-from lpq577_code.文本翻译 import translate_google_api
-
-from logging_config import setup_logger
 from opencc import OpenCC
 from urllib.parse import quote_plus
 from flask import Flask, request
-from lpq577_code.daraz相关 import daraz_api
+
+from 文本翻译.文字翻译 import Translators
+from logging_config import setup_logger
 from 电商平台爬虫api.api_1688 import Alibaba
 from ruten循环上下架 import RutenUpload
 from 电商平台爬虫api.api_ruten import Ruten
 from 电商平台爬虫api.api_taobao import TaoBao
-from 象寄翻译 import XiangJi
 from 电商平台爬虫api.api_pinduoduo import PinDuoDuo
+from 象寄翻译 import XiangJi
 
 # 在创建Flask应用前设置日志
 setup_logger()
@@ -140,9 +141,9 @@ def get_min_price_by_ruten():
 
     # 获取需要过滤的sellerid
     with open(
-        r"D:\露天精细化运营工具\其他辅助工具\露天全网比价程序\计算折扣百分比\附件库\seller_id.txt",
-        "r",
-        encoding="utf-8",
+            r"D:\露天精细化运营工具\其他辅助工具\露天全网比价程序\计算折扣百分比\附件库\seller_id.txt",
+            "r",
+            encoding="utf-8",
     ) as f:
         seller_id_total = [line.strip() for line in f]
 
@@ -212,7 +213,7 @@ def get_min_price_by_ruten():
             if not contrast_data["item"]["specInfo"]:
                 continue
             if converter.convert(
-                next(iter(product_data["item"]["specMap"]["spec"]))
+                    next(iter(product_data["item"]["specMap"]["spec"]))
             ) != converter.convert(
                 next(iter(contrast_data["item"]["specMap"]["spec"]))
             ):
@@ -328,7 +329,10 @@ def upload_to_ruten():
         return {"code": -5, "store": store, "data": product_data["message"]}
 
     product_id = product_data["data"]["product_id"]
-    logging.info(f"{product_id}-商品数据包成功解析")
+    logging.info(f"{product_id}-商品数据包成功解析并记录上货数据包")
+
+    # 将上架数据包写入数据库
+    ruten_uplaod_instance.upload_data_packet_recordd(platform, product_id, json.dumps(product_data))
 
     # 获取违禁品词列表
     forbidden_items = ruten_uplaod_instance.load_forbidden_items()

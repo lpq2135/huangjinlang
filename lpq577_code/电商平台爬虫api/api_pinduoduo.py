@@ -1,7 +1,7 @@
 import json
 import ast
 import random
-from 电商平台爬虫api.basic_assistanc import BaseCrawler
+from .basic_assistanc import BaseCrawler
 
 
 class PinDuoDuo(BaseCrawler):

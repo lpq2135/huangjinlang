@@ -94,6 +94,32 @@ def unable_to_list_id_record(store, product_id):
         # 关闭数据库连接和游标
         mysql_pool.close_mysql(cnx, cursor)
 
+# 记录上架数据包
+def upload_data_packet_recordd(store, product_id):
+    try:
+        cnx, cursor = mysql_pool.get_conn()
+        cursor.execute(
+            """
+            INSERT INTO upload_data_packet_record (platform, product_id, product_data)
+            VALUES (%s, %s, %s)
+            """,
+            (store, product_id, product_data),
+        )
+        cnx.commit()
+
+    except Exception as e:
+        # 如果发生异常，记录错误日志并回滚事务
+        logging.warning(
+            "记录商品数据包, product_id: %s, error: %s",
+            product_id,
+            str(e),
+        )
+        cnx.rollback()  # 回滚事务，避免无效或部分更新的数据
+
+    finally:
+        # 关闭数据库连接和游标
+        mysql_pool.close_mysql(cnx, cursor)
+
 
 # 记录上传失败的商品ID
 def record_upload_error(store, product_id):
@@ -313,15 +339,14 @@ def get_the_id_that_cannot_be_listed(store):
 
 
 class RutenUpload(BaseCrawler):
-    def __init__(
-        self,
-        store,
-        upload_count=None,
-        is_add_main_logo=None,
-        img_save_path=None,
-        is_save_img=None,
-        proxies=None,
-    ):
+    def __init__(self, store, upload_count=None, is_add_main_logo=None, img_save_path=None, is_save_img=None, proxies=None):
+        self.db_config = {
+            "host": "47.122.62.157",
+            "user": "ruten_str",
+            "password": "Qiang123..",
+            "database": "ruten_str",
+            "port": 3306,
+        }
         self.store = store
         cookie = self.get_cookie_by_api()
         if cookie is None:
@@ -387,14 +412,8 @@ class RutenUpload(BaseCrawler):
 
     # 获取店铺对应的付款和运输方式
     def get_payment_and_shipping(self, store):
-        connection = mysql.connector.connect(
-            host="47.122.62.157",
-            user="ruten_str",
-            password="Qiang123..",
-            database="ruten_str",
-            port=3306,
-        )
         try:
+            connection = mysql.connector.connect(**self.db_config)
             cursor = connection.cursor()
             cursor.execute(
                 "SELECT g_pay_way, g_deliver_way FROM payment_and_shipping_methods WHERE store = %s",
@@ -409,6 +428,33 @@ class RutenUpload(BaseCrawler):
         except Exception as e:
             logging.warning("获取店铺物流和运输方式异常: %s", str(e))
             return False
+        finally:
+            connection.close()
+            cursor.close()
+
+    # 记录上架数据包
+    def upload_data_packet_recordd(self, platform, product_id, product_data):
+        try:
+            connection = mysql.connector.connect(**self.db_config)
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO upload_data_packet_record (platform, product_id, product_data)
+                VALUES (%s, %s, %s)
+                """,
+                (platform, product_id, product_data),
+            )
+            connection.commit()
+
+        except Exception as e:
+            # 如果发生异常，记录错误日志并回滚事务
+            logging.warning(
+                "记录商品数据包, product_id: %s, error: %s",
+                product_id,
+                str(e),
+            )
+            connection.rollback()  # 回滚事务，避免无效或部分更新的数据
+
         finally:
             connection.close()
             cursor.close()
