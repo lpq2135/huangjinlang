@@ -3,7 +3,6 @@ import logging
 import sys
 import time
 from lpq577_code.数据库连接 import MySqlPool
-from lpq577_code.logging_config import setup_logger
 from lpq577_code.daraz相关 import daraz_api
 from lpq577_code.电商平台爬虫api.api_1688 import Alibaba
 from lpq577_code.文本翻译.文字翻译 import Translator

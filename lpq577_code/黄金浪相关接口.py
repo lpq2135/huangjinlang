@@ -1,5 +1,3 @@
-import sys
-import os
 import requests
 import base64
 import gzip
@@ -12,7 +10,6 @@ from opencc import OpenCC
 from urllib.parse import quote_plus
 from flask import Flask, request
 
-from 文本翻译.文字翻译 import Translators
 from logging_config import setup_logger
 from 电商平台爬虫api.api_1688 import Alibaba
 from ruten循环上下架 import RutenUpload
