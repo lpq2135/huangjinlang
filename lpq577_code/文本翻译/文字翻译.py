@@ -3,15 +3,15 @@ import re
 import hashlib
 import logging
 import ast
+import concurrent.futures
 from googletrans import Translator
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 
 
 class Translators:
-    def __init__(self, data=None, deepl_api=None):
+    def __init__(self, data=None):
         self.data = data
-        self.deepl_api = deepl_api
         self.translator = Translator()
 
     def translate_text_with_sougou(self, text, translate_to="en"):
@@ -59,54 +59,13 @@ class Translators:
                 logging.warning(f"搜狗翻译请求失败，尝试第{attempt + 1}次. Error: {e}")
         raise Exception("搜狗翻译请求失败")
 
-    def translate_text_with_deepl(self, text):
-        # 对 text 进行格式化处理
-        for i in range(len(text)):
-            value = self.replace_brackets(text[i])
-            value = self.format_text(value)
-            text[i] = value
-
-        auth_key = self.deepl_api
-        deepl_url = "https://api.deepl.com/v2/translate"
-        data = {
-            "auth_key": auth_key,
-            "text": text,
-            "source_lang": "ZH",
-            "target_lang": "EN",
-        }
-        attempt = 1
-        while attempt <= 10:
-            try:
-                response = requests.post(deepl_url, data=data, timeout=30)
-                if response.status_code != 200:
-                    logging.warning(
-                        f"deepl翻译请求网络异常: {response.status_code}，第{attempt}次重试"
-                    )
-                    continue
-                result = [
-                    self.format_brackets(self.remove_last_dot(i["text"])).title()
-                    for i in response.json()["translations"]
-                ]
-                return result
-            except Exception as e:
-                logging.warning(f"deepl翻译请求失败，尝试第{attempt}次. Error: {e}")
-            attempt += 1
-        raise Exception("deepl翻译请求失败")
-
-    def translate_text_with_google(self, text):
-        # 对 text 进行格式化处理
-        for i in range(len(text)):
-            value = self.replace_brackets(text[i])
-            value = self.format_text(value)
-            text[i] = value
-
-        while True:
-            try:
-                translation = self.translator.translate(f"{text}", src='zh-cn', dest='en')
-                result = ast.literal_eval(translation.text)
-                return result
-            except Exception as e:
-                logging.warning("googletrans发生错误:", e)
+    def translate_text_with_google(self, text, dest="en"):
+        translator = Translator(service_urls=["translate.google.com"])
+        try:
+            return translator.translate(text, src="zh-cn", dest=dest).text
+        except Exception as e:
+            logging.warning(f"翻译失败: {e}")
+            return None
 
     def remove_last_dot(self, str):
         """
@@ -119,16 +78,26 @@ class Translators:
     def is_chinese(self, check_str):
         """
         检查字符串是否包含中文字符。
+
         :param check_str: 输入字符串
         :return: 如果包含中文字符返回True，否则返回False
         """
         return bool(re.search(r"[\u4e00-\u9fff]", check_str))
 
-    def split_list(self, input_list):
-        # 将列表按照指定大小切分
-        return [input_list[i : i + 50] for i in range(0, len(input_list), 50)]
-
     def format_title(self, title):
+        """
+        将翻译后的标题的特殊字符格式化成小写
+
+        Args:
+            title: 待处理的英文标题
+
+        Returns:
+            处理完成的标题
+        """
+        # 将标题的首字母提前转化成大写
+        title = title.title()
+
+        # 需小写的特殊单词列表
         lowercase_words = [
             # 连接词和冠词
             "and",
@@ -213,22 +182,23 @@ class Translators:
         # 遍历要替换成小写的指定词
         for word in lowercase_words:
             # 使用正则替换，忽略大小写，并将匹配到的词替换成小写
-            title = re.sub(
-                r"\b" + re.escape(word) + r"\b",
-                word.lower(),
-                title,
-                flags=re.IGNORECASE,
-            )
+            title = re.sub(r"\b" + re.escape(word) + r"\b", word.lower(), title, flags=re.IGNORECASE)
         return title
 
     def format_text(self, text):
-        return re.sub(r'[^\w\s.,!?:;\'"[\]+\-|]', "", text)
+        """
+        过滤文本中的特殊字符，仅保留以下内容：
+        - 字母、数字（\w）
+        - 空白字符（\s）
+        - 常见标点符号（.,!?:;'"[]+-|）
 
-    def replace_brackets(self, text):
-        # 替换【为[，】为]
-        text = re.sub(r"【", "[", text)
-        text = re.sub(r"】", "]", text)
-        return text
+        Args:
+            text (str): 待处理的原始文本
+
+        Returns:
+            str: 过滤后的文本（移除了不支持的字符）
+        """
+        return re.sub(r'[^\w\s.,!?:;\'"[\]+\-|]', "", text)
 
     def replace_sku_value(self, text):
         # 格式化详情文字
@@ -236,6 +206,8 @@ class Translators:
         text = text.replace('"', "")
         text = text.replace(",", "+")
         text = text.replace("and", "+")
+        text = re.sub(r"【", "[", text)
+        text = re.sub(r"】", "]", text)
         return text
 
     def format_brackets(self, text):
@@ -262,11 +234,28 @@ class Translators:
 
         return text
 
-    def process_skumodel(self):
+    def translate_json_str(self):
+        """
+        将json中的字符串提取出来组成一个集合进行整体的翻译
+
+        Returns:
+            翻译后的self.data
+        """
+        # 创建集合
+        text = set()
+        # 提取标题
+        title = self.data["title"]
+        text.add(title)
+
+        # 提取详情文字
+        details_text_description = self.data["details_text_description"]
+        for i in details_text_description:
+            text.add(i)
+
+        # 获取skumodel键下需要翻译的文本
         if self.data["specifications"] != 0:
             sku_data = self.data["skumodel"]["sku_data"]
             # 获取skumodel键下需要翻译的文本
-            text = set()
             for value in sku_data["sku_property_name"].values():
                 text.add(value)
             if self.data["specifications"] == 1:
@@ -278,18 +267,34 @@ class Translators:
                     text.add(sku1_value)
                     text.add(sku2_value)
 
-            # 将集合转换成列表
-            text_list = list(text)
+        # 将集合转换成列表
+        text_list = list(text)
 
-            # 判断列表长度进行拆分
-            sub_lists = self.split_list(list(text_list))
-            text_lists = []
-            for sub_list in sub_lists:
-                text_lists.extend(self.translate_text_with_google(sub_list))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(self.translate_text_with_google, text_list))
 
+        # 将翻译后的标题替换原始数据
+        title_en = results[text_list.index(title)]
+        # 格式化标题英文
+        title_en = self.format_title(title_en).replace(",", "")
+        # 将标题翻译成乌尔都语
+        title_ur = self.translate_text_with_google(title, "ur")
+        # 替换title的值并且新增键title_ur
+        self.data["title"] = title_en
+        self.data["title_ur"] = title_ur
+
+        # 将翻译后的详情文本文本替换原始数据
+        details_text_list = []
+        for i in details_text_description:
+            details_text_list.append(results[text_list.index(i)].title())
+        self.data["details_text_description"] = details_text_list
+
+        # 将翻译后的sku_property_name内的文本替换原始数据
+        if self.data["specifications"] != 0:
             count = 1
+            sku_data = self.data["skumodel"]["sku_data"]
             for key in sku_data["sku_property_name"].keys():
-                value = text_lists[text_list.index(sku_data["sku_property_name"][key])]
+                value = results[text_list.index(sku_data["sku_property_name"][key])]
                 if "colour" in value.lower() or "color" in value.lower():
                     sku_data["sku_property_name"][key] = "color"
                 elif "size" in value:
@@ -302,61 +307,21 @@ class Translators:
                         sku_data["sku_property_name"][key] = value
                 count += 1
 
-            if self.data["specifications"] == 1:
-                for i in sku_data["sku_parameter"]:
-                    value = text_lists[text_list.index(i["name"])]
-                    i["name"] = self.replace_sku_value(value)
+        # 单规格情况下，将翻译后的sku_parameter内的文本替换原始数据
+        if self.data["specifications"] == 1:
+            for i in sku_data["sku_parameter"]:
+                value = results[text_list.index(i["name"])]
+                i["name"] = self.replace_sku_value(value).title()
 
-            elif self.data["specifications"] == 2:
-                for i in sku_data["sku_parameter"]:
-                    value_1, value_2 = i["name"].split("||")
-                    sku1_value = text_lists[text_list.index(value_1)]
-                    sku2_value = text_lists[text_list.index(value_2)]
-                    i["name"] = (
-                        self.replace_sku_value(sku1_value)
-                        + "||"
-                        + self.replace_sku_value(sku2_value)
-                    )
+        # 双规格情况下，将翻译后的sku_parameter内的文本替换原始数据
+        elif self.data["specifications"] == 2:
+            for i in sku_data["sku_parameter"]:
+                value_1, value_2 = i["name"].split("||")
+                sku1_value = results[text_list.index(value_1)]
+                sku2_value = results[text_list.index(value_2)]
+                i["name"] = (self.replace_sku_value(sku1_value).title() + "||" + self.replace_sku_value(sku2_value)).title()
 
-    def process_title(self):
-        title = self.translate_text_with_google([self.data["title"]])
-        title = self.format_title(ast.literal_eval(title)[0]).replace(",", "")
-        self.data["title"] = title
-
-    def process_details_text_description(self):
-        # 获取skumodel键下需要翻译的文本
-        text = self.data["details_text_description"]
-
-        # 判断列表长度进行拆分
-        sub_lists = self.split_list(text)
-
-        # 替换原始数据
-        text_lists = []
-        new_text_lists = []
-        for sub_list in sub_lists:
-            text_lists.extend(self.translate_text_with_google(sub_list))
-        for i in range(len(text_lists)):
-            if self.is_chinese(text_lists[i]) or (text_lists[i]).count(",") >= 4:
-                continue
-            new_text_lists.append(text_lists[i])
-        self.data["details_text_description"] = new_text_lists
-
-    def process_all(self):
-        # 使用 ThreadPoolExecutor 并行执行这些任务
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            # 提交任务并返回 future 对象
-            future_title = executor.submit(self.process_title)
-            future_skumodel = executor.submit(self.process_skumodel)
-            future_description = executor.submit(self.process_details_text_description)
-
-            # 等待所有任务完成
-            wait(
-                [future_title, future_skumodel, future_description],
-                return_when=ALL_COMPLETED,
-            )
-
-        # 在所有任务完成后返回处理的数据
-        return self.data  # 返回处理后的所有结果
+        return self.data
 
 
 if __name__ == "__main__":
@@ -850,5 +815,5 @@ if __name__ == "__main__":
         },
     }
     translator_deepl = Translators(tetx["data"])
-    res = translator_deepl.process_all()
+    res = translator_deepl.translate_json_str()
     print(tetx)

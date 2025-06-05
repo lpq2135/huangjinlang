@@ -6,10 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="c25c5df6-3e25-4cb2-8971-76cc9f24a0a8" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lpq577_code/daraz相关/daraz_集成上架.py" beforeDir="false" afterPath="$PROJECT_DIR$/lpq577_code/daraz相关/daraz_集成上架.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lpq577_code/文本翻译/文字翻译.py" beforeDir="false" afterPath="$PROJECT_DIR$/lpq577_code/文本翻译/文字翻译.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lpq577_code/新测试.py" beforeDir="false" afterPath="$PROJECT_DIR$/lpq577_code/新测试.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lpq577_code/电商平台爬虫api/api_1688.py" beforeDir="false" afterPath="$PROJECT_DIR$/lpq577_code/电商平台爬虫api/api_1688.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lpq577_code/黄金浪相关接口.py" beforeDir="false" afterPath="$PROJECT_DIR$/lpq577_code/黄金浪相关接口.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,32 +39,34 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
-    &quot;Python.api_1688.executor&quot;: &quot;Run&quot;,
-    &quot;Python.api_pinduoduo.executor&quot;: &quot;Run&quot;,
-    &quot;Python.api_ruten.executor&quot;: &quot;Run&quot;,
-    &quot;Python.api_taobao.executor&quot;: &quot;Run&quot;,
-    &quot;Python.basic_assistanc.executor&quot;: &quot;Run&quot;,
-    &quot;Python.daraz_集成上架.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.setup.executor&quot;: &quot;Run&quot;,
-    &quot;Python.translate_google_api.executor&quot;: &quot;Debug&quot;,
-    &quot;Python.文字翻译.executor&quot;: &quot;Run&quot;,
-    &quot;Python.新测试.executor&quot;: &quot;Run&quot;,
-    &quot;Python.黄金浪相关接口.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/Backup/Downloads/py-googletrans-main&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_ADD_EXTERNAL_FILES": "true",
+    "Python.api_1688.executor": "Run",
+    "Python.api_pinduoduo.executor": "Run",
+    "Python.api_ruten.executor": "Run",
+    "Python.api_taobao.executor": "Run",
+    "Python.basic_assistanc.executor": "Run",
+    "Python.daraz_集成上架.executor": "Debug",
+    "Python.setup.executor": "Run",
+    "Python.translate_google_api.executor": "Debug",
+    "Python.文字翻译 (1).executor": "Run",
+    "Python.文字翻译.executor": "Run",
+    "Python.新测试.executor": "Run",
+    "Python.黄金浪相关接口.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "deletionFromPopupRequiresConfirmation": "false",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "D:/Backup/Downloads/py-googletrans-main",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\Administrator\PycharmProjects\pythonProject\huangjinlang\lpq577_code\文本翻译" />
@@ -75,7 +75,30 @@
       <recent name="C:\Users\Administrator\PycharmProjects\pythonProject\huangjinlang\lpq577_code\output" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.api_1688">
+  <component name="RunManager" selected="Python.文字翻译 (1)">
+    <configuration name="文字翻译 (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="huangjinlang" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/lpq577_code/文本翻译" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/lpq577_code/文本翻译/文字翻译.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="文字翻译" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="huangjinlang" />
       <option name="ENV_FILES" value="" />
@@ -91,6 +114,52 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="C:\Users\Administrator\PycharmProjects\pythonProject\huangjinlang\lpq577_code\文本翻译\文字翻译.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="新测试" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="huangjinlang" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/lpq577_code" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/lpq577_code/新测试.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="新测试" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="huangjinlang" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/lpq577_code" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/lpq577_code/新测试.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -216,6 +285,8 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.文字翻译 (1)" />
+        <item itemvalue="Python.新测试" />
         <item itemvalue="Python.api_1688" />
         <item itemvalue="Python.setup" />
         <item itemvalue="Python.文字翻译" />
@@ -242,6 +313,8 @@
       <workItem from="1748583687637" duration="1870000" />
       <workItem from="1748834522909" duration="29847000" />
       <workItem from="1749034467625" duration="635000" />
+      <workItem from="1749047059610" duration="9505000" />
+      <workItem from="1749094769752" duration="8206000" />
     </task>
     <servers />
   </component>
@@ -270,24 +343,24 @@
           <option name="timeStamp" value="13" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/lpq577_code/新测试.py</url>
-          <line>12</line>
-          <option name="timeStamp" value="31" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/lpq577_code/黄金浪相关接口.py</url>
           <line>331</line>
           <option name="timeStamp" value="32" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/lpq577_code/ruten循环上下架.py</url>
-          <line>353</line>
-          <option name="timeStamp" value="36" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/lpq577_code/黄金浪相关接口.py</url>
           <line>219</line>
           <option name="timeStamp" value="37" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/lpq577_code/文本翻译/文字翻译.py</url>
+          <line>310</line>
+          <option name="timeStamp" value="44" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/lpq577_code/文本翻译/文字翻译.py</url>
+          <line>321</line>
+          <option name="timeStamp" value="48" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -300,7 +373,7 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/huangjinlang$.coverage" NAME="新测试 覆盖结果" MODIFIED="1749034141117" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
+    <SUITE FILE_PATH="coverage/huangjinlang$.coverage" NAME="新测试 覆盖结果" MODIFIED="1749095000292" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code" />
     <SUITE FILE_PATH="coverage/huangjinlang$translate_google_api.coverage" NAME="translate_google_api 覆盖结果" MODIFIED="1748424418678" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/文本翻译" />
     <SUITE FILE_PATH="coverage/huangjinlang$daraz_.coverage" NAME="daraz_集成上架 覆盖结果" MODIFIED="1748419478803" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/daraz相关" />
     <SUITE FILE_PATH="coverage/huangjinlang$api_taobao.coverage" NAME="api_taobao 覆盖结果" MODIFIED="1748844663916" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/电商平台爬虫api" />
@@ -309,5 +382,6 @@
     <SUITE FILE_PATH="coverage/huangjinlang$api_1688.coverage" NAME="api_1688 覆盖结果" MODIFIED="1749032939720" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/电商平台爬虫api" />
     <SUITE FILE_PATH="coverage/huangjinlang$setup.coverage" NAME="setup 覆盖结果" MODIFIED="1749032459805" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="D:/Backup/Downloads/translate-json-main" />
     <SUITE FILE_PATH="coverage/huangjinlang$api_pinduoduo.coverage" NAME="api_pinduoduo 覆盖结果" MODIFIED="1748846758646" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/电商平台爬虫api" />
+    <SUITE FILE_PATH="coverage/huangjinlang$__1_.coverage" NAME="文字翻译 (1) 覆盖结果" MODIFIED="1749095828766" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/lpq577_code/文本翻译" />
   </component>
 </project>
